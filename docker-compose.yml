@@ -1,0 +1,9 @@
+services:
+  nexusbot:
+    build: .
+    container_name: nexusbot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
