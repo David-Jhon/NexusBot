@@ -1,5 +1,6 @@
 const { nowPlayingEmbed } = require('../../utils/embeds');
 const { nowPlayingButtons } = require('../../utils/buttons');
+const { clearNpMessage, registerNpMessage, startNpAutoRefresh } = require('../../utils/nowPlayingManager');
 const queueManager = require('../../structures/queueManager');
 const logger = require('../../utils/logger');
 
@@ -16,12 +17,18 @@ function getTextChannel(queue) {
 function registerPlayerEvents(player) {
   const events = player.events;
 
-  events.on('playerStart', (queue, track) => {
+  events.on('playerStart', async (queue, track) => {
+    await clearNpMessage(queue);
     const channel = getTextChannel(queue);
     if (channel) {
-      channel
-        .send({ embeds: [nowPlayingEmbed(track, queue)], components: [nowPlayingButtons(queue)] })
-        .catch(() => null);
+      try {
+        const msg = await channel.send({
+          embeds: [nowPlayingEmbed(track, queue)],
+          components: nowPlayingButtons(queue),
+        });
+        registerNpMessage(queue, msg);
+        startNpAutoRefresh(queue, msg);
+      } catch {}
     }
     queueManager.scheduleSnapshot(queue.guild.id);
   });
@@ -31,11 +38,12 @@ function registerPlayerEvents(player) {
   events.on('audioTrackRemove', (queue) => queueManager.scheduleSnapshot(queue.guild.id));
 
   events.on('emptyQueue', (queue) => {
-    // Autoplay handles "never truly empty" — this only fires if autoplay is off.
+    clearNpMessage(queue);
     queueManager.clearSnapshot(queue.guild.id);
   });
 
   events.on('emptyChannel', (queue) => {
+    clearNpMessage(queue);
     logger.info('Player', 'Voice channel empty, leaving per configured timeout', {
       guildId: queue.guild.id,
     });
@@ -61,12 +69,14 @@ function registerPlayerEvents(player) {
   });
 
   events.on('disconnect', (queue) => {
+    clearNpMessage(queue);
     logger.warn('Player', 'Bot was disconnected from voice, queue cleared by discord-player', {
       guildId: queue.guild.id,
     });
   });
 
   events.on('connectionDestroyed', (queue) => {
+    clearNpMessage(queue);
     logger.warn('Player', 'Voice connection destroyed', { guildId: queue.guild.id });
   });
 }

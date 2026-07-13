@@ -1,6 +1,9 @@
-const { useQueue } = require('discord-player');
+const { useQueue, QueueRepeatMode } = require('discord-player');
 const logger = require('../../utils/logger');
-const { errorEmbed } = require('../../utils/embeds');
+const { nowPlayingEmbed, errorEmbed } = require('../../utils/embeds');
+const { nowPlayingButtons } = require('../../utils/buttons');
+const { getNpMessage, clearNpMessage } = require('../../utils/nowPlayingManager');
+const db = require('../../database/db');
 
 module.exports = {
   name: 'interactionCreate',
@@ -33,23 +36,49 @@ module.exports = {
 
       try {
         switch (action) {
-          case 'pauseresume':
+          case 'pauseresume': {
             queue.node.setPaused(!queue.node.isPaused());
+            await interaction.deferUpdate();
+            const msg = getNpMessage(queue);
+            if (msg && queue.currentTrack) {
+              await msg.edit({
+                embeds: [nowPlayingEmbed(queue.currentTrack, queue)],
+                components: nowPlayingButtons(queue),
+              }).catch(() => null);
+            }
             break;
+          }
           case 'skip':
             queue.node.skip();
+            await interaction.deferUpdate();
             break;
-          case 'stop':
+          case 'endsession':
+            await interaction.deferUpdate();
+            clearNpMessage(queue);
             queue.delete();
             break;
           case 'shuffle':
             queue.tracks.shuffle();
+            await interaction.deferUpdate();
             break;
           case 'loop':
-            queue.setRepeatMode(queue.repeatMode === 0 ? 1 : 0); // toggle track loop
+            queue.setRepeatMode(
+              queue.repeatMode === QueueRepeatMode.OFF
+                ? QueueRepeatMode.TRACK
+                : queue.repeatMode === QueueRepeatMode.TRACK
+                  ? QueueRepeatMode.QUEUE
+                  : QueueRepeatMode.OFF,
+            );
+            await interaction.deferUpdate();
             break;
+          case 'autoplay': {
+            const isAutoplay = queue.repeatMode !== QueueRepeatMode.AUTOPLAY;
+            queue.setRepeatMode(isAutoplay ? QueueRepeatMode.AUTOPLAY : QueueRepeatMode.OFF);
+            db.updateGuildSettings(interaction.guildId, { autoplay: isAutoplay });
+            await interaction.deferUpdate();
+            break;
+          }
         }
-        await interaction.deferUpdate();
       } catch (err) {
         logger.error('Button', 'Failed to handle now-playing button', { err: String(err) });
         await interaction.reply({ embeds: [errorEmbed('Could not perform that action.')], ephemeral: true }).catch(() => null);

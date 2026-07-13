@@ -3,10 +3,20 @@ const path = require('node:path');
 const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const { Player } = require('discord-player');
 const { DefaultExtractors } = require('@discord-player/extractor');
+const { YoutubeiExtractor } = require('discord-player-youtubei');
 
 const config = require('./config');
 const logger = require('./utils/logger');
 const { registerPlayerEvents } = require('./events/player');
+
+// ---- Graceful shutdown ----
+function shutdown(signal) {
+  logger.info('Process', `Received ${signal}, shutting down gracefully...`);
+  try { client.destroy(); } catch {}
+  process.exit(0);
+}
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 if (!config.token || !config.clientId) {
   logger.error('Bootstrap', 'Missing DISCORD_TOKEN or CLIENT_ID in environment. Copy .env.example to .env and fill it in.');
@@ -21,6 +31,8 @@ const client = new Client({
   ],
   partials: [Partials.Channel],
 });
+
+logger.setClient(client);
 
 client.commands = new Collection();
 
@@ -61,6 +73,12 @@ const player = new Player(client, {
       clientSecret: config.spotify.clientSecret,
     });
   }
+
+  // Register YouTube extractor for playback and AUTOPLAY bridging
+  player.extractors.register(YoutubeiExtractor, {
+    streamOptions: { useClient: 'WEB' },
+    generateWithPoToken: true,
+  });
 
   registerPlayerEvents(player);
 
