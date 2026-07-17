@@ -5,6 +5,17 @@ const { Player } = require('discord-player');
 const { DefaultExtractors } = require('@discord-player/extractor');
 const { YoutubeiExtractor } = require('discord-player-youtubei');
 
+// Suppress noisy YouTube.js warnings
+const _origWarn = console.warn;
+const _origLog = console.log;
+const SUPPRESSED = ['Unable to find matching run', 'Failed to extract signature', 'Failed to extract n decipher'];
+function isSuppressed(...args) {
+  const msg = args.map(String).join(' ');
+  return SUPPRESSED.some(p => msg.includes(p));
+}
+console.warn = (...args) => { if (!isSuppressed(...args)) _origWarn.apply(console, args); };
+console.log = (...args) => { if (!isSuppressed(...args)) _origLog.apply(console, args); };
+
 const config = require('./config');
 const logger = require('./utils/logger');
 const { registerPlayerEvents } = require('./events/player');
@@ -64,21 +75,31 @@ const player = new Player(client, {
 (async () => {
   await player.extractors.loadMulti(DefaultExtractors);
 
-  // Register Spotify credentials if provided, for better rate limits than
-  // the default unauthenticated metadata bridge.
+  const { SpotifyExtractor } = require('discord-player-spotify');
   if (config.spotify.clientId && config.spotify.clientSecret) {
-    const spotifyExtractor = player.extractors.get('com.discord-player.spotifyextractor');
-    spotifyExtractor?.setOptions?.({
+    player.extractors.register(SpotifyExtractor, {
       clientId: config.spotify.clientId,
       clientSecret: config.spotify.clientSecret,
     });
+    logger.info('Bootstrap', 'Spotify extractor registered (discord-player-spotify)');
+  } else {
+    logger.info('Bootstrap', 'Spotify skipped (no credentials)');
   }
 
-  // Register YouTube extractor for playback and AUTOPLAY bridging
   player.extractors.register(YoutubeiExtractor, {
-    streamOptions: { useClient: 'WEB' },
-    generateWithPoToken: true,
+    streamOptions: { useClient: 'ANDROID' },
   });
+
+  const { DeezerExtractor } = require('discord-player-deezer');
+  if (config.deezer.arl && config.deezer.decryptionKey) {
+    player.extractors.register(DeezerExtractor, {
+      arl: config.deezer.arl,
+      decryptionKey: config.deezer.decryptionKey,
+    });
+    logger.info('Bootstrap', 'Deezer extractor registered');
+  } else {
+    logger.info('Bootstrap', 'Deezer skipped (no ARL or decryption key)');
+  }
 
   registerPlayerEvents(player);
 

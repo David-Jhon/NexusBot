@@ -12,6 +12,11 @@ module.exports = {
     clientSecret: process.env.SPOTIFY_CLIENT_SECRET || null,
   },
 
+  deezer: {
+    arl: process.env.DEEZER_ARL_COOKIE || null,
+    decryptionKey: process.env.DEEZER_MASTER_KEY || null,
+  },
+
   databaseFile: process.env.DATABASE_FILE
     ? path.resolve(process.cwd(), process.env.DATABASE_FILE)
     : path.resolve(process.cwd(), 'data', 'nexusbot.sqlite'),

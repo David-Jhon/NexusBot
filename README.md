@@ -1,8 +1,9 @@
 # NexusBot
 
-A free Discord music bot with 24/7 playback, autoplay, Spotify/YouTube/SoundCloud
-support, custom playlists, queue persistence, and reconnect recovery —
-built on `discord.js` v14 and `discord-player` v7.
+A free Discord music bot with 24/7 playback, autoplay, multi-source playback
+(YouTube, Spotify, SoundCloud, Deezer, Apple Music), custom playlists, queue
+persistence, and reconnect recovery — built on `discord.js` v14 and
+`discord-player` v7.
 
 ## Setup
 
@@ -35,6 +36,11 @@ npm start
 Register a free app at https://developer.spotify.com/dashboard and set
 `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` in `.env` for higher rate limits
 than the default unauthenticated Spotify→YouTube bridge.
+
+### Optional: Deezer support
+Set `DEEZER_ARL_COOKIE` and `DEEZER_MASTER_KEY` in `.env` to enable Deezer
+playback. Both values come from external sources (DMCA-sensitive, not included
+in the package). Deezer only supports URLs, not text search.
 
 ## Running in production
 
@@ -70,27 +76,30 @@ pm2 startup   # follow the printed instructions to survive host reboots
 
 `/play`, `/search`, `/skip`, `/stop`, `/pause`, `/resume`, `/queue`,
 `/nowplaying`, `/loop`, `/volume`, `/shuffle`, `/playnext`, `/remove`,
-`/seek`, `/filters`, `/247`, `/autoplay`, `/playlist save|load|list|delete`
+`/seek`, `/filters`, `/247`, `/autoplay`, `/playlist save|load|list|delete`,
+`/info`
 
 ## Project layout
 
 ```
 src/
 ├── index.js                # bootstrap: client, Player, extractors, loaders
+├── config.js               # env vars → config object
 ├── deploy-commands.js      # registers slash commands with Discord
 ├── commands/                # one file per slash command
 ├── events/
 │   ├── discord/             # ready, interactionCreate
-│   └── player/               # discord-player lifecycle + error handling
+│   └── player/              # discord-player lifecycle + AUTOPLAY fallback
 ├── structures/
 │   └── queueManager.js      # snapshotting, rehydration, watchdog
 ├── database/
-│   └── db.js                 # SQLite (better-sqlite3) schema + repositories
-├── utils/
-│   ├── embeds.js
-│   ├── buttons.js
-│   └── logger.js
-└── config.js
+│   └── db.js                # SQLite (better-sqlite3) schema + repositories
+└── utils/
+    ├── embeds.js
+    ├── buttons.js
+    ├── logger.js
+    ├── nowPlayingManager.js # track/cleanup/refresh now-playing messages
+    └── queryResolver.js     # query detection + extractor matching
 ```
 
 ## Notes on scaling
@@ -111,3 +120,8 @@ you outgrow that:
 - **No bot streams real Spotify audio** (no ToS-compliant API for that).
   Spotify links are resolved to track metadata and bridged to a playable
   source (YouTube/SoundCloud) — this is standard even among paid competitors.
+- **Deezer text search doesn't work** — only URLs. The extractor's `validate()`
+  returns true for text but can't actually search.
+- **YouTube playlists may partially fail** — `ContinuationItemView` parser error
+  in `youtubei.js@16.0.1` (fixed in v17.2.0 but `discord-player-youtubei`
+  pins the older version). First ~100 tracks usually load fine.

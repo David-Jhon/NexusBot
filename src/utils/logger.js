@@ -3,6 +3,18 @@ const config = require('../config');
 let client = null;
 const recentErrors = new Map();
 
+// Suppress noisy YouTube.js warnings
+const SUPPRESSED_PATTERNS = [
+  'Unable to find matching run for command run',
+  'Unable to find matching run for attachment run',
+  'Failed to extract signature decipher',
+  'Failed to extract n decipher',
+];
+
+function isSuppressed(message) {
+  return SUPPRESSED_PATTERNS.some(p => message.includes(p));
+}
+
 function timestamp() {
   return new Date().toISOString();
 }
@@ -31,12 +43,15 @@ module.exports = {
     client = c;
   },
   info(scope, message, meta) {
+    if (isSuppressed(message)) return;
     console.log(format('INFO', scope, message, meta));
   },
   warn(scope, message, meta) {
+    if (isSuppressed(message)) return;
     console.warn(format('WARN', scope, message, meta));
   },
   error(scope, message, meta) {
+    if (isSuppressed(message)) return;
     const line = format('ERROR', scope, message, meta);
     console.error(line);
     notifyOwners(line);
