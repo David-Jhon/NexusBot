@@ -19,6 +19,8 @@ function registerPlayerEvents(player) {
   const events = player.events;
 
   events.on('playerStart', async (queue, track) => {
+    // Skip votes are per track
+    queue.__voteSkips?.clear();
     await clearNpMessage(queue);
     // Store track info for autoplay fallback
     queue.metadata = queue.metadata || {};

@@ -60,6 +60,9 @@ Implemented in `src/events/player/index.js` (`willAutoPlay` event):
 - CommonJS, no TypeScript, no linting, no tests, no CI.
 - All dependencies are runtime deps (zero devDependencies).
 - Commands use `useQueue(guildId)` / `useMainPlayer()` from discord-player (no DI).
+- Anything that calls `player.play()` must pass `buildPlayOptions()` from `src/utils/playback.js`: nodeOptions (24/7, volume, self-deaf) only apply to the call that creates the queue, and it forces the YouTube/Deezer extractor for their links. Follow with `applyGuildAutoplay(queue)`.
+- Commands that restart the stream (`/seek`, `/filters`) must `deferReply()` first; the restart can exceed Discord's 3s limit.
+- Vote-skip logic lives in `voteSkip()` in `src/commands/skip.js`, shared with the Skip button. Votes reset on `playerStart`.
 - Filters: `queue.filters.ffmpeg.toggle()` with 11 curated presets.
 - Button interactions prefixed `nexus:`. The music handler in `interactionCreate.js` only claims IDs listed in `MUSIC_BUTTONS`; reaction-role components use `nexus:rr:`. Add new now-playing buttons to `MUSIC_BUTTONS`.
 

@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { useMainPlayer, useQueue } = require('discord-player');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
+const { buildPlayOptions, applyGuildAutoplay, searchEngineFor } = require('../utils/playback');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -20,18 +21,24 @@ module.exports = {
     await interaction.deferReply();
 
     try {
-      const searchResult = await player.search(query, { requestedBy: interaction.user });
+      const searchResult = await player.search(query, {
+        requestedBy: interaction.user,
+        searchEngine: searchEngineFor(query),
+      });
       if (!searchResult?.tracks?.length) {
         return interaction.followUp({ embeds: [errorEmbed('No results found.')] });
       }
 
-      let queue = useQueue(interaction.guildId);
-      if (!queue) {
-        // No active queue yet — behaves like a normal /play
-        const { queue: newQueue, track } = await player.play(channel, searchResult.tracks[0], {
-          nodeOptions: { metadata: { textChannelId: interaction.channelId } },
-        });
-        return interaction.followUp({ embeds: [successEmbed(`Queued **${track.title}**`)] });
+      const queue = useQueue(interaction.guildId);
+      if (!queue?.currentTrack) {
+        // Nothing playing (no queue, or an idle 24/7 queue) — behaves like a normal /play so playback starts
+        const { queue: newQueue, track } = await player.play(
+          channel,
+          searchResult.tracks[0],
+          buildPlayOptions(interaction.guildId, { requestedBy: interaction.user, textChannelId: interaction.channelId }),
+        );
+        applyGuildAutoplay(newQueue);
+        return interaction.followUp({ embeds: [successEmbed(`Now playing **${track.title}**`)] });
       }
 
       const track = searchResult.tracks[0];

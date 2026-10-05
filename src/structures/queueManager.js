@@ -2,6 +2,7 @@ const { useMainPlayer, useQueue, QueueRepeatMode } = require('discord-player');
 const db = require('../database/db');
 const logger = require('../utils/logger');
 const config = require('../config');
+const { buildPlayOptions } = require('../utils/playback');
 
 // Debounce map so we don't hammer SQLite on every single queue mutation event
 const pendingSnapshotTimers = new Map();
@@ -92,24 +93,21 @@ async function rehydrateAllQueues(client) {
       // Restore who queued each track so "Requested by" survives restarts
       const fetchRequester = (id) => (id ? client.users.fetch(id).catch(() => null) : null);
 
-      const { queue } = await player.play(channel, first.url, {
-        requestedBy: await fetchRequester(first.requestedById),
-        nodeOptions: {
-          metadata: { textChannelId: snapshot.textChannelId },
+      // Same options as /play (24/7, cooldowns, self-deaf), plus the forced extractor for YouTube links
+      const restoreOptions = async (t) =>
+        buildPlayOptions(snapshot.guildId, {
+          query: t.url,
+          requestedBy: await fetchRequester(t.requestedById),
+          textChannelId: snapshot.textChannelId,
           volume: snapshot.volume,
-          leaveOnEmpty: false,
-          leaveOnEnd: false,
-          leaveOnStop: false,
-        },
-      });
+        });
+
+      const { queue } = await player.play(channel, first.url, await restoreOptions(first));
 
       queue.setRepeatMode(snapshot.repeatMode ?? QueueRepeatMode.OFF);
 
       for (const t of rest) {
-        await player.play(channel, t.url, {
-          requestedBy: await fetchRequester(t.requestedById),
-          nodeOptions: { metadata: { textChannelId: snapshot.textChannelId } },
-        }).catch((err) =>
+        await player.play(channel, t.url, await restoreOptions(t)).catch((err) =>
           logger.warn('QueueManager', 'Skipped a track during rehydration', {
             guildId: snapshot.guildId,
             url: t.url,

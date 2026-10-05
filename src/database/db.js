@@ -66,6 +66,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_reaction_roles_role ON reaction_roles (roleId);
 `);
 
+// Columns added after release: add them to databases created by older versions
+if (!db.prepare(`PRAGMA table_info(reaction_roles)`).all().some((c) => c.name === 'description')) {
+  db.exec(`ALTER TABLE reaction_roles ADD COLUMN description TEXT`);
+}
+
 // ---------- Guild settings ----------
 
 const getGuildSettingsStmt = db.prepare(`SELECT * FROM guild_settings WHERE guildId = ?`);
@@ -217,8 +222,8 @@ const rrStmts = {
   deletePanel: db.prepare(`DELETE FROM reaction_role_panels WHERE messageId = ?`),
   nextPosition: db.prepare(`SELECT COALESCE(MAX(position), -1) + 1 AS next FROM reaction_roles WHERE messageId = ?`),
   insertMapping: db.prepare(`
-    INSERT INTO reaction_roles (messageId, roleId, emojiKey, emojiRaw, label, position)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO reaction_roles (messageId, roleId, emojiKey, emojiRaw, label, description, position)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `),
   deleteMapping: db.prepare(`DELETE FROM reaction_roles WHERE messageId = ? AND roleId = ?`),
   getMappings: db.prepare(`SELECT * FROM reaction_roles WHERE messageId = ? ORDER BY position`),
@@ -260,9 +265,9 @@ function deletePanel(messageId) {
   return deletePanelTx(messageId);
 }
 
-function addReactionRole(messageId, { roleId, emojiKey = null, emojiRaw = null, label = null }) {
+function addReactionRole(messageId, { roleId, emojiKey = null, emojiRaw = null, label = null, description = null }) {
   const { next } = rrStmts.nextPosition.get(messageId);
-  rrStmts.insertMapping.run(messageId, roleId, emojiKey, emojiRaw, label, next);
+  rrStmts.insertMapping.run(messageId, roleId, emojiKey, emojiRaw, label, description, next);
 }
 
 function removeReactionRole(messageId, roleId) {

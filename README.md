@@ -88,8 +88,9 @@ the command, and the bot's role must sit above every role it hands out.
    - `reaction` — members react with an emoji (max 20 roles)
    - `button` — one button per role (max 25)
    - `dropdown` — a select menu (max 25)
-2. `/reactionrole add panel role emoji label` — attach roles (emoji is required
-   for reaction panels, optional otherwise).
+2. `/reactionrole add panel role emoji label description` — attach roles (emoji is required
+   for reaction panels, optional otherwise). `description` is a one-liner shown under the
+   role and in the dropdown.
 3. `/reactionrole mode` — change behaviour at any time:
 
 | Mode | Behaviour |

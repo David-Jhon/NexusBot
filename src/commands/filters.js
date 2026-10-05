@@ -7,7 +7,7 @@ const { successEmbed, errorEmbed } = require('../utils/embeds');
 // want to expose all of them later (e.g. as a select-menu).
 const FILTER_CHOICES = [
   'bassboost', 'nightcore', 'vaporwave', '8D', 'karaoke', 'reverse',
-  'surround', 'earwax', 'lofi', 'tremolo', 'vibrato', 'normalizer',
+  'surrounding', 'lofi', 'tremolo', 'vibrato', 'normalizer',
 ];
 
 module.exports = {
@@ -32,9 +32,11 @@ module.exports = {
     const active = queue.filters.ffmpeg.getFiltersEnabled();
     const isActive = active.includes(filter);
 
+    // Toggling restarts the stream, which can take longer than Discord's 3s reply window
+    await interaction.deferReply();
     await queue.filters.ffmpeg.toggle(filter);
 
-    return interaction.reply({
+    return interaction.editReply({
       embeds: [successEmbed(`Filter **${filter}** ${isActive ? 'disabled' : 'enabled'}`)],
     });
   },

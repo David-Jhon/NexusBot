@@ -1,10 +1,12 @@
 const { useQueue, QueueRepeatMode } = require('discord-player');
 const logger = require('../../utils/logger');
-const { nowPlayingEmbed, errorEmbed } = require('../../utils/embeds');
+const { nowPlayingEmbed, errorEmbed, successEmbed } = require('../../utils/embeds');
 const { nowPlayingButtons } = require('../../utils/buttons');
 const { getNpMessage, clearNpMessage } = require('../../utils/nowPlayingManager');
 const db = require('../../database/db');
 const { isReactionRoleComponent, handleComponent } = require('../../utils/reactionRoleEvents');
+const queueManager = require('../../structures/queueManager');
+const { voteSkip } = require('../../commands/skip');
 
 // Now-playing panel buttons (see utils/buttons.js)
 const MUSIC_BUTTONS = new Set(
@@ -59,6 +61,14 @@ module.exports = {
         return interaction.reply({ embeds: [errorEmbed('Nothing is playing right now.')], ephemeral: true });
       }
 
+      // Only people listening with the bot can control it
+      if (interaction.member?.voice?.channelId !== queue.channel?.id) {
+        return interaction.reply({
+          embeds: [errorEmbed('Join my voice channel to use these buttons.')],
+          ephemeral: true,
+        });
+      }
+
       const action = interaction.customId.split(':')[1];
 
       try {
@@ -75,14 +85,28 @@ module.exports = {
             }
             break;
           }
-          case 'skip':
-            queue.node.skip();
-            await interaction.deferUpdate();
+          case 'skip': {
+            if (!queue.currentTrack) {
+              await interaction.reply({ embeds: [errorEmbed('Nothing is playing right now.')], ephemeral: true });
+              break;
+            }
+            // Same vote rules as /skip
+            const result = voteSkip(queue, interaction.member);
+            if (result.skipped) {
+              await interaction.deferUpdate();
+            } else if (result.error) {
+              await interaction.reply({ embeds: [errorEmbed(result.error)], ephemeral: true });
+            } else {
+              await interaction.reply({ embeds: [successEmbed(result.text)] });
+            }
             break;
+          }
           case 'endsession':
             await interaction.deferUpdate();
             clearNpMessage(queue);
             queue.delete();
+            // Otherwise the saved snapshot brings the ended session back on the next restart
+            queueManager.clearSnapshot(interaction.guildId);
             break;
           case 'shuffle':
             queue.tracks.shuffle();

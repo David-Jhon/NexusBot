@@ -1,11 +1,9 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { useMainPlayer, QueueRepeatMode } = require('discord-player');
+const { useMainPlayer } = require('discord-player');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
 const { resolveQuery } = require('../utils/queryResolver');
+const { YOUTUBE_ENGINE, buildPlayOptions, applyGuildAutoplay } = require('../utils/playback');
 const logger = require('../utils/logger');
-const db = require('../database/db');
-
-const YOUTUBE_ENGINE = 'ext:com.retrouser955.discord-player.discord-player-youtubei';
 
 // Autocomplete must answer within 3s, so cache recent searches and cap the wait
 const SUGGEST_TIMEOUT_MS = 2_500;
@@ -82,7 +80,6 @@ module.exports = {
 
     const query = interaction.options.getString('query', true);
     const player = useMainPlayer();
-    const settings = db.getGuildSettings(interaction.guildId);
 
     await interaction.deferReply();
 
@@ -118,38 +115,26 @@ module.exports = {
         type: resolved.type,
       });
 
-      // Force correct extractor to prevent attachmentextractor from stealing URLs
-      const isYouTubeUrl = /(?:youtube\.com|youtu\.be)/.test(resolvedQuery);
-      const isDeezerUrl = resolvedQuery.includes('deezer.com') || resolvedQuery.includes('dzr.page.link');
-      const playOptions = {
-        requestedBy: interaction.user,
-        nodeOptions: {
-          metadata: { textChannelId: interaction.channelId },
-          volume: settings.defaultVolume,
-          leaveOnEmpty: !settings.twentyFourSeven,
-          leaveOnEmptyCooldown: 60_000,
-          leaveOnEnd: !settings.twentyFourSeven,
-          leaveOnEndCooldown: 60_000,
-          leaveOnStop: !settings.twentyFourSeven,
-          selfDeaf: true,
-        },
-      };
-      if (isYouTubeUrl) {
-        playOptions.searchEngine = YOUTUBE_ENGINE;
-      } else if (isDeezerUrl) {
-        playOptions.searchEngine = 'ext:com.retrouser955.discord-player.deezr-ext';
-      }
+      const { track, queue, searchResult } = await player.play(
+        channel,
+        resolvedQuery,
+        buildPlayOptions(interaction.guildId, {
+          query: resolvedQuery,
+          requestedBy: interaction.user,
+          textChannelId: interaction.channelId,
+        }),
+      );
 
-      const { track, queue } = await player.play(channel, resolvedQuery, playOptions);
+      applyGuildAutoplay(queue);
 
-      if (settings.autoplay) queue.setRepeatMode(QueueRepeatMode.AUTOPLAY);
+      // player.play waits for playback to start, so the new track is already current if nothing else was
+      const verb = queue.currentTrack === track ? 'Now playing' : 'Queued';
+      const playlist = searchResult?.playlist;
+      const text = playlist
+        ? `Queued **${searchResult.tracks.length}** tracks from **${playlist.title}**`
+        : `${verb} **${track.title}**`;
 
-      const isFirst = queue.tracks.size === 0 && !queue.currentTrack;
-      const verb = isFirst ? 'Now playing' : 'Queued';
-
-      return interaction.followUp({
-        embeds: [successEmbed(`${verb} **${track.title}**`)],
-      });
+      return interaction.followUp({ embeds: [successEmbed(text)] });
     } catch (err) {
       const msg = err.message || String(err);
 

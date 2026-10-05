@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const { useMainPlayer, useQueue } = require('discord-player');
 const db = require('../database/db');
 const { successEmbed, errorEmbed, baseEmbed } = require('../utils/embeds');
+const { buildPlayOptions, applyGuildAutoplay } = require('../utils/playback');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -62,10 +63,12 @@ module.exports = {
       let queued = 0;
       for (const track of playlist.tracks) {
         try {
-          await player.play(channel, track.url, {
-            requestedBy: interaction.user,
-            nodeOptions: { metadata: { textChannelId: interaction.channelId } },
-          });
+          const { queue } = await player.play(
+            channel,
+            track.url,
+            buildPlayOptions(guildId, { query: track.url, requestedBy: interaction.user, textChannelId: interaction.channelId }),
+          );
+          if (queued === 0) applyGuildAutoplay(queue);
           queued++;
         } catch {
           // skip tracks that fail to resolve (e.g. removed from source) and continue

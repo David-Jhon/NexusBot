@@ -87,6 +87,9 @@ module.exports = {
         )
         .addStringOption((opt) =>
           opt.setName('label').setDescription('Short text shown next to the role').setMaxLength(80),
+        )
+        .addStringOption((opt) =>
+          opt.setName('description').setDescription('One-line description shown under the role').setMaxLength(100),
         ),
     )
     .addSubcommand((sub) =>
@@ -219,6 +222,7 @@ module.exports = {
       const role = interaction.options.getRole('role', true);
       const emojiInput = interaction.options.getString('emoji');
       const label = interaction.options.getString('label');
+      const description = interaction.options.getString('description');
       const mappings = db.getReactionRoles(panel.messageId);
 
       const roleError = checkRoleManageable(guild, role, interaction.member);
@@ -260,6 +264,7 @@ module.exports = {
         emojiKey: emoji?.key ?? null,
         emojiRaw: emoji?.raw ?? null,
         label,
+        description,
       });
 
       try {

@@ -25,6 +25,21 @@ const MODE_HINTS = {
   binding: 'Your first pick is permanent.',
 };
 
+const MODE_BADGES = {
+  normal: '🔄 Normal',
+  unique: '🎯 Unique',
+  verify: '✅ Verify',
+  drop: '📤 Drop',
+  reversed: '🔃 Reversed',
+  binding: '🔒 Binding',
+};
+
+const STYLE_FOOTERS = {
+  reaction: 'React below to pick',
+  button: 'Click a button to toggle',
+  dropdown: 'Use the menu below',
+};
+
 const CUSTOM_EMOJI_RE = /^<(a?):([\w~]{1,32}):(\d{17,20})>$/;
 // Rough check: input must contain at least one pictographic/regional-indicator/keycap character
 const UNICODE_EMOJI_RE = /\p{Extended_Pictographic}|\p{Regional_Indicator}|⃣/u;
@@ -59,20 +74,31 @@ function roleLabel(mapping, guild) {
 /** Build the full panel message payload ({ embeds, components }). */
 function buildPanelMessage(panel, mappings, guild) {
   const lines = mappings.map((m) => {
-    const prefix = m.emojiRaw ? `${m.emojiRaw} ` : '• ';
-    const label = m.label ? ` — ${m.label}` : '';
-    return `${prefix}<@&${m.roleId}>${label}`;
+    const prefix = m.emojiRaw ?? '•';
+    const desc = m.description ? `\n-# ${m.description}` : '';
+    const name = m.label ? `**${m.label}** · <@&${m.roleId}>` : `<@&${m.roleId}>`;
+    return `${prefix}  ${name}${desc}`;
   });
 
-  const description = [panel.description, lines.join('\n') || '*No roles yet.*'].filter(Boolean).join('\n\n');
+  const limit = panel.maxRoles > 0 && panel.mode !== 'unique' ? ` · Limit **${panel.maxRoles}**` : '';
+  const modeBlock = `> **${MODE_BADGES[panel.mode]} mode**${limit}\n> ${MODE_HINTS[panel.mode]}`;
+  const roleList = lines.join('\n') || '*No roles yet. Add some with `/reactionrole add`.*';
+  // Truncate the role list, never the mode block, so members always see how the panel behaves
+  const head = panel.description ? `${panel.description}\n\n` : '';
+  const description = `${truncate(`${head}${roleList}`, 4096 - modeBlock.length - 2)}\n\n${modeBlock}`;
 
-  const footer = [MODE_HINTS[panel.mode]];
-  if (panel.maxRoles > 0 && panel.mode !== 'unique') footer.push(`Limit: ${panel.maxRoles} role(s).`);
+  // Accent with the first panel role that has a color, so each panel matches its roles
+  const accent = mappings.map((m) => guild.roles.cache.get(m.roleId)?.colors?.primaryColor).find(Boolean);
+  const icon = guild.iconURL({ size: 256 });
+  const count = `${mappings.length} role${mappings.length === 1 ? '' : 's'}`;
 
   const embed = baseEmbed()
+    .setAuthor({ name: guild.name, iconURL: icon ?? undefined })
     .setTitle(panel.title)
-    .setDescription(truncate(description, 4096))
-    .setFooter({ text: footer.join(' ') });
+    .setThumbnail(icon)
+    .setDescription(description)
+    .setFooter({ text: `${count} · ${STYLE_FOOTERS[panel.style]}` });
+  if (accent) embed.setColor(accent);
 
   const components = [];
 
@@ -83,7 +109,7 @@ function buildPanelMessage(panel, mappings, guild) {
         const button = new ButtonBuilder()
           .setCustomId(`${BUTTON_PREFIX}${m.roleId}`)
           .setLabel(roleLabel(m, guild))
-          .setStyle(ButtonStyle.Secondary);
+          .setStyle(ButtonStyle.Primary);
         if (m.emojiRaw) button.setEmoji(m.emojiRaw);
         row.addComponents(button);
       }
@@ -94,13 +120,14 @@ function buildPanelMessage(panel, mappings, guild) {
   if (panel.style === 'dropdown' && mappings.length) {
     const menu = new StringSelectMenuBuilder()
       .setCustomId(MENU_ID)
-      .setPlaceholder('Select a role to add or remove')
+      .setPlaceholder('✨ Choose your roles…')
       .setMinValues(1)
       .setMaxValues(panel.mode === 'unique' ? 1 : mappings.length)
       .addOptions(
         mappings.map((m) => {
           const option = { label: roleLabel(m, guild), value: m.roleId };
           if (m.emojiRaw) option.emoji = m.emojiRaw;
+          if (m.description) option.description = m.description;
           return option;
         }),
       );

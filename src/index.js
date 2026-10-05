@@ -79,11 +79,12 @@ const player = new Player(client, {
 
   const { SpotifyExtractor } = require('discord-player-spotify');
   if (config.spotify.clientId && config.spotify.clientSecret) {
-    player.extractors.register(SpotifyExtractor, {
+    const spotifyExt = await player.extractors.register(SpotifyExtractor, {
       clientId: config.spotify.clientId,
       clientSecret: config.spotify.clientSecret,
     });
-    logger.info('Bootstrap', 'Spotify extractor registered (discord-player-spotify)');
+    if (spotifyExt) logger.info('Bootstrap', 'Spotify extractor registered (discord-player-spotify)');
+    else logger.warn('Bootstrap', 'Spotify extractor failed to register');
   } else {
     logger.info('Bootstrap', 'Spotify skipped (no credentials)');
   }
@@ -95,11 +96,12 @@ const player = new Player(client, {
 
   const { DeezerExtractor } = require('discord-player-deezer');
   if (config.deezer.arl && config.deezer.decryptionKey) {
-    player.extractors.register(DeezerExtractor, {
+    const deezerExt = await player.extractors.register(DeezerExtractor, {
       arl: config.deezer.arl,
       decryptionKey: config.deezer.decryptionKey,
     });
-    logger.info('Bootstrap', 'Deezer extractor registered');
+    if (deezerExt) logger.info('Bootstrap', 'Deezer extractor registered');
+    else logger.warn('Bootstrap', 'Deezer extractor failed to register');
   } else {
     logger.info('Bootstrap', 'Deezer skipped (no ARL or decryption key)');
   }
