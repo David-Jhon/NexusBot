@@ -26,7 +26,8 @@ npm start               # start the bot
 - **Entrypoint:** `src/index.js` — boots Client, Player, extractors, loaders.
 - **Commands:** `src/commands/*.js`, each exports `{ data, execute }`. Auto-discovered.
 - **Events:** `src/events/discord/` and `src/events/player/` — auto-discovered.
-- **Database:** `better-sqlite3` (synchronous, WAL mode). Tables: `guild_settings`, `queue_snapshots`, `saved_playlists`.
+- **Database:** `better-sqlite3` (synchronous, WAL mode). Tables: `guild_settings`, `queue_snapshots`, `saved_playlists`, `reaction_role_panels`, `reaction_roles`.
+- **Reaction roles:** `/reactionrole` + `src/utils/reactionRoles.js` (all mode/limit rules live in `applyRoleAction`) + `src/utils/reactionRoleEvents.js`. Needs `GuildMessageReactions` intent and `Message`/`Reaction`/`User` partials so old panels work after restarts. Members are fetched with `force: true` because there's no `GuildMembers` intent.
 - **Persistence:** Queue state snapshotted to SQLite (debounced 3s). Rehydrated on boot. Watchdog checks every 30s for dead voice connections.
 - **Vote-skip:** Uses a `__voteSkips` Set on the queue object (non-standard). Default threshold 0.5.
 
@@ -35,7 +36,7 @@ npm start               # start the bot
 Registered in `src/index.js` bootstrap (order matters for priority):
 1. `DefaultExtractors` — SoundCloud, Attachment, Vimeo, ReverbNation, Apple Music, built-in Spotify
 2. `SpotifyExtractor` (from `discord-player-spotify`) — requires `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET`
-3. `YoutubeExtractor` (from `discord-player-youtubei` v3) — default stream trial order. No credentials needed.
+3. `YoutubeExtractor` (from `discord-player-youtubei` v3) — No credentials needed. **Priority set to 10** so Spotify tracks bridge to YouTube; at the default priority 1, SoundCloud (registered earlier) wins ties and often matches a different song with the same name.
 4. `DeezerExtractor` — requires `DEEZER_ARL_COOKIE` + `DEEZER_MASTER_KEY`. **Supports text search** via Deezer's public API (`api.deezer.com/search/track`).
 
 **Deezer priority:** Default priority is lower than YouTube/Spotify. To make Deezer the preferred source (like WD-40 does), set `deezerExt.priority = 12` after registration. Without this, text queries will go to YouTube/Spotify instead.
@@ -60,7 +61,7 @@ Implemented in `src/events/player/index.js` (`willAutoPlay` event):
 - All dependencies are runtime deps (zero devDependencies).
 - Commands use `useQueue(guildId)` / `useMainPlayer()` from discord-player (no DI).
 - Filters: `queue.filters.ffmpeg.toggle()` with 11 curated presets.
-- Button interactions prefixed `nexus:`.
+- Button interactions prefixed `nexus:`. The music handler in `interactionCreate.js` only claims IDs listed in `MUSIC_BUTTONS`; reaction-role components use `nexus:rr:`. Add new now-playing buttons to `MUSIC_BUTTONS`.
 
 ## Gotchas
 

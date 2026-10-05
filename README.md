@@ -11,8 +11,8 @@ persistence, and reconnect recovery — built on `discord.js` v14 and
 - Node.js 18.17+
 - ffmpeg installed on the host (or use the provided Dockerfile, which installs it for you)
 - A Discord application + bot token: https://discord.com/developers/applications
-  - Enable the **Server Members Intent** is *not* required. Only **Guild Voice States** is needed, which is not privileged.
-  - Invite the bot with the `bot` and `applications.commands` scopes and at least: `View Channel`, `Connect`, `Speak`, `Send Messages`, `Embed Links`.
+  - No privileged intents are required (the **Server Members Intent** is *not* needed).
+  - Invite the bot with the link from `/info` (or the bot's About Me). It requests every permission the bot uses, including `Manage Roles`, `Add Reactions` and `Manage Messages` for reaction roles.
 
 ### 2. Install
 ```bash
@@ -77,7 +77,33 @@ pm2 startup   # follow the printed instructions to survive host reboots
 `/play`, `/search`, `/skip`, `/stop`, `/pause`, `/resume`, `/queue`,
 `/nowplaying`, `/loop`, `/volume`, `/shuffle`, `/playnext`, `/remove`,
 `/seek`, `/filters`, `/247`, `/autoplay`, `/playlist save|load|list|delete`,
-`/info`
+`/info`, `/reactionrole create|add|remove|mode|list|delete`
+
+## Reaction roles
+
+Carl-bot / Dyno style self-assignable roles. Requires **Manage Roles** to use
+the command, and the bot's role must sit above every role it hands out.
+
+1. `/reactionrole create` — posts a panel. Pick a **style**:
+   - `reaction` — members react with an emoji (max 20 roles)
+   - `button` — one button per role (max 25)
+   - `dropdown` — a select menu (max 25)
+2. `/reactionrole add panel role emoji label` — attach roles (emoji is required
+   for reaction panels, optional otherwise).
+3. `/reactionrole mode` — change behaviour at any time:
+
+| Mode | Behaviour |
+|------|-----------|
+| `normal` | Pick to get the role, pick again / unreact to lose it |
+| `unique` | Only one role from the panel at a time; picking a new one swaps |
+| `verify` | Roles can only be added, never removed (rules acceptance) |
+| `drop` | Picking removes the role |
+| `reversed` | Reacting removes the role, unreacting gives it (reaction style only) |
+| `binding` | The first pick is permanent |
+
+`limit` caps how many roles a member can hold from one panel (0 = unlimited).
+Panels keep working after restarts; deleting the panel message or a role
+cleans up automatically.
 
 ## Project layout
 
@@ -88,7 +114,7 @@ src/
 ├── deploy-commands.js      # registers slash commands with Discord
 ├── commands/                # one file per slash command
 ├── events/
-│   ├── discord/             # ready, interactionCreate
+│   ├── discord/             # ready, interactionCreate, reaction/message/role events
 │   └── player/              # discord-player lifecycle + AUTOPLAY fallback
 ├── structures/
 │   └── queueManager.js      # snapshotting, rehydration, watchdog
@@ -98,8 +124,11 @@ src/
     ├── embeds.js
     ├── buttons.js
     ├── logger.js
+    ├── invite.js            # invite link + required permissions
     ├── nowPlayingManager.js # track/cleanup/refresh now-playing messages
-    └── queryResolver.js     # query detection + extractor matching
+    ├── queryResolver.js     # query detection + extractor matching
+    ├── reactionRoles.js     # panel rendering, emoji parsing, mode rules
+    └── reactionRoleEvents.js # reaction / button / dropdown handlers
 ```
 
 ## Notes on scaling

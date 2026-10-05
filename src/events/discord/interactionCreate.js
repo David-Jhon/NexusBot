@@ -4,6 +4,12 @@ const { nowPlayingEmbed, errorEmbed } = require('../../utils/embeds');
 const { nowPlayingButtons } = require('../../utils/buttons');
 const { getNpMessage, clearNpMessage } = require('../../utils/nowPlayingManager');
 const db = require('../../database/db');
+const { isReactionRoleComponent, handleComponent } = require('../../utils/reactionRoleEvents');
+
+// Now-playing panel buttons (see utils/buttons.js)
+const MUSIC_BUTTONS = new Set(
+  ['pauseresume', 'skip', 'endsession', 'shuffle', 'loop', 'autoplay'].map((action) => `nexus:${action}`),
+);
 
 module.exports = {
   name: 'interactionCreate',
@@ -38,7 +44,16 @@ module.exports = {
       return;
     }
 
-    if (interaction.isButton() && interaction.customId.startsWith('nexus:')) {
+    if (isReactionRoleComponent(interaction)) {
+      try {
+        await handleComponent(interaction);
+      } catch (err) {
+        logger.error('ReactionRoles', 'Failed to handle reaction role component', { err: String(err) });
+      }
+      return;
+    }
+
+    if (interaction.isButton() && MUSIC_BUTTONS.has(interaction.customId)) {
       const queue = useQueue(interaction.guildId);
       if (!queue) {
         return interaction.reply({ embeds: [errorEmbed('Nothing is playing right now.')], ephemeral: true });

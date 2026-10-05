@@ -39,8 +39,10 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
   ],
-  partials: [Partials.Channel],
+  // Message/Reaction/User partials let reaction roles work on panels posted before a restart
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
 });
 
 logger.setClient(client);
@@ -86,7 +88,10 @@ const player = new Player(client, {
     logger.info('Bootstrap', 'Spotify skipped (no credentials)');
   }
 
-  player.extractors.register(YoutubeExtractor, {});
+  // Every extractor defaults to priority 1, so Spotify tracks were bridged to SoundCloud first,
+  // whose fuzzy match often picks a different song with the same name. Try YouTube first.
+  const youtubeExt = await player.extractors.register(YoutubeExtractor, {});
+  if (youtubeExt) youtubeExt.priority = 10;
 
   const { DeezerExtractor } = require('discord-player-deezer');
   if (config.deezer.arl && config.deezer.decryptionKey) {

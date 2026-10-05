@@ -1,7 +1,7 @@
 const { OAuth2Scopes, PermissionFlagsBits, PermissionsBitField } = require('discord.js');
 const config = require('../config');
 
-// Everything the bot needs to post now-playing panels and stream audio
+// Everything the bot needs for music (now-playing panels, audio) and reaction roles
 const REQUIRED_PERMISSIONS = new PermissionsBitField([
   PermissionFlagsBits.ViewChannel,
   PermissionFlagsBits.SendMessages,
@@ -9,6 +9,9 @@ const REQUIRED_PERMISSIONS = new PermissionsBitField([
   PermissionFlagsBits.EmbedLinks,
   PermissionFlagsBits.ReadMessageHistory,
   PermissionFlagsBits.UseExternalEmojis,
+  PermissionFlagsBits.AddReactions,
+  PermissionFlagsBits.ManageRoles,
+  PermissionFlagsBits.ManageMessages,
   PermissionFlagsBits.Connect,
   PermissionFlagsBits.Speak,
   PermissionFlagsBits.UseVAD,

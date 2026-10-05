@@ -38,6 +38,32 @@ db.exec(`
     createdAt  TEXT NOT NULL,
     UNIQUE(guildId, ownerId, name)
   );
+
+  CREATE TABLE IF NOT EXISTS reaction_role_panels (
+    messageId   TEXT PRIMARY KEY,
+    guildId     TEXT NOT NULL,
+    channelId   TEXT NOT NULL,
+    title       TEXT NOT NULL,
+    description TEXT,
+    style       TEXT NOT NULL DEFAULT 'reaction',
+    mode        TEXT NOT NULL DEFAULT 'normal',
+    maxRoles    INTEGER NOT NULL DEFAULT 0,
+    createdBy   TEXT NOT NULL,
+    createdAt   TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS reaction_roles (
+    messageId TEXT NOT NULL,
+    roleId    TEXT NOT NULL,
+    emojiKey  TEXT,
+    emojiRaw  TEXT,
+    label     TEXT,
+    position  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (messageId, roleId)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_reaction_role_panels_guild ON reaction_role_panels (guildId);
+  CREATE INDEX IF NOT EXISTS idx_reaction_roles_role ON reaction_roles (roleId);
 `);
 
 // ---------- Guild settings ----------
@@ -171,6 +197,89 @@ function deletePlaylist(guildId, ownerId, name) {
   return info.changes > 0;
 }
 
+// ---------- Reaction roles ----------
+
+// getPanel/deletePanel run on every reaction and every message delete, so prepare once
+const rrStmts = {
+  insertPanel: db.prepare(`
+    INSERT INTO reaction_role_panels (messageId, guildId, channelId, title, description, style, mode, maxRoles, createdBy, createdAt)
+    VALUES (@messageId, @guildId, @channelId, @title, @description, @style, @mode, @maxRoles, @createdBy, @createdAt)
+  `),
+  getPanel: db.prepare(`SELECT * FROM reaction_role_panels WHERE messageId = ?`),
+  listPanels: db.prepare(`
+    SELECT p.*, (SELECT COUNT(*) FROM reaction_roles r WHERE r.messageId = p.messageId) AS roleCount
+    FROM reaction_role_panels p WHERE p.guildId = ? ORDER BY p.createdAt DESC
+  `),
+  updatePanel: db.prepare(`
+    UPDATE reaction_role_panels SET mode = @mode, maxRoles = @maxRoles WHERE messageId = @messageId
+  `),
+  deleteMappings: db.prepare(`DELETE FROM reaction_roles WHERE messageId = ?`),
+  deletePanel: db.prepare(`DELETE FROM reaction_role_panels WHERE messageId = ?`),
+  nextPosition: db.prepare(`SELECT COALESCE(MAX(position), -1) + 1 AS next FROM reaction_roles WHERE messageId = ?`),
+  insertMapping: db.prepare(`
+    INSERT INTO reaction_roles (messageId, roleId, emojiKey, emojiRaw, label, position)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `),
+  deleteMapping: db.prepare(`DELETE FROM reaction_roles WHERE messageId = ? AND roleId = ?`),
+  getMappings: db.prepare(`SELECT * FROM reaction_roles WHERE messageId = ? ORDER BY position`),
+  mappingsByRole: db.prepare(`SELECT * FROM reaction_roles WHERE roleId = ?`),
+  deleteByRole: db.prepare(`DELETE FROM reaction_roles WHERE roleId = ?`),
+};
+
+function createPanel(panel) {
+  rrStmts.insertPanel.run({
+    description: null,
+    maxRoles: 0,
+    ...panel,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+function getPanel(messageId) {
+  return rrStmts.getPanel.get(messageId) || null;
+}
+
+function listPanels(guildId) {
+  return rrStmts.listPanels.all(guildId);
+}
+
+function updatePanel(messageId, patch) {
+  const current = getPanel(messageId);
+  if (!current) return null;
+  const next = { ...current, ...patch };
+  rrStmts.updatePanel.run({ messageId, mode: next.mode, maxRoles: next.maxRoles });
+  return next;
+}
+
+const deletePanelTx = db.transaction((messageId) => {
+  rrStmts.deleteMappings.run(messageId);
+  return rrStmts.deletePanel.run(messageId).changes > 0;
+});
+
+function deletePanel(messageId) {
+  return deletePanelTx(messageId);
+}
+
+function addReactionRole(messageId, { roleId, emojiKey = null, emojiRaw = null, label = null }) {
+  const { next } = rrStmts.nextPosition.get(messageId);
+  rrStmts.insertMapping.run(messageId, roleId, emojiKey, emojiRaw, label, next);
+}
+
+function removeReactionRole(messageId, roleId) {
+  return rrStmts.deleteMapping.run(messageId, roleId).changes > 0;
+}
+
+function getReactionRoles(messageId) {
+  return rrStmts.getMappings.all(messageId);
+}
+
+/** Removes a deleted role from every panel; returns the removed mappings (messageId, emojiKey, ...). */
+const removeRoleEverywhere = db.transaction((roleId) => {
+  const removed = rrStmts.mappingsByRole.all(roleId);
+  rrStmts.deleteByRole.run(roleId);
+  return removed;
+});
+
 module.exports = {
   db,
   getGuildSettings,
@@ -183,4 +292,13 @@ module.exports = {
   loadPlaylist,
   listPlaylists,
   deletePlaylist,
+  createPanel,
+  getPanel,
+  listPanels,
+  updatePanel,
+  deletePanel,
+  addReactionRole,
+  removeReactionRole,
+  getReactionRoles,
+  removeRoleEverywhere,
 };
