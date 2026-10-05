@@ -46,9 +46,9 @@ async function resolveQuery(query) {
 
   // 4. Determine if extractor can stream directly (no bridge needed)
   const streamingExtractors = [
-    'com.discord-player.youtubeiextractor',
+    'com.retrouser955.discord-player.discord-player-youtubei',
     'com.discord-player.soundcloudextractor',
-    'com.discord-player.deezerextractor',
+    'com.retrouser955.discord-player.deezr-ext',
     'com.discord-player.tts',
     'com.discord-player.attachmentextractor',
   ];

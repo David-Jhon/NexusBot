@@ -40,7 +40,7 @@ than the default unauthenticated Spotify→YouTube bridge.
 ### Optional: Deezer support
 Set `DEEZER_ARL_COOKIE` and `DEEZER_MASTER_KEY` in `.env` to enable Deezer
 playback. Both values come from external sources (DMCA-sensitive, not included
-in the package). Deezer only supports URLs, not text search.
+in the package). Deezer supports both URLs and text search via its public API.
 
 ## Running in production
 
@@ -120,8 +120,6 @@ you outgrow that:
 - **No bot streams real Spotify audio** (no ToS-compliant API for that).
   Spotify links are resolved to track metadata and bridged to a playable
   source (YouTube/SoundCloud) — this is standard even among paid competitors.
-- **Deezer text search doesn't work** — only URLs. The extractor's `validate()`
-  returns true for text but can't actually search.
-- **YouTube playlists may partially fail** — `ContinuationItemView` parser error
-  in `youtubei.js@16.0.1` (fixed in v17.2.0 but `discord-player-youtubei`
-  pins the older version). First ~100 tracks usually load fine.
+- **Deezer priority is low by default** — text queries go to YouTube/Spotify
+  first. Set `deezerExt.priority = 12` after registration to make Deezer
+  the preferred source.

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const config = require('../config');
+const { getInviteUrl } = require('../utils/invite');
 
 function formatUptime(ms) {
   const s = Math.floor(ms / 1000);
@@ -31,7 +32,7 @@ module.exports = {
     const pingMs = client.ws.ping;
     const pingRatio = Math.min(pingMs / 500, 1);
 
-    const invite = `https://discord.com/oauth2/authorize?client_id=${config.clientId}&permissions=2147485696&scope=bot%20applications.commands`;
+    const invite = getInviteUrl(client.user.id);
 
     const embed = new EmbedBuilder()
       .setColor(config.brand.color)

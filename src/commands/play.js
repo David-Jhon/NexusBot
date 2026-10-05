@@ -5,13 +5,72 @@ const { resolveQuery } = require('../utils/queryResolver');
 const logger = require('../utils/logger');
 const db = require('../database/db');
 
+const YOUTUBE_ENGINE = 'ext:com.retrouser955.discord-player.discord-player-youtubei';
+
+// Autocomplete must answer within 3s, so cache recent searches and cap the wait
+const SUGGEST_TIMEOUT_MS = 2_500;
+const SUGGEST_CACHE_TTL_MS = 5 * 60_000;
+const SUGGEST_CACHE_MAX = 200;
+const suggestCache = new Map();
+
+function truncate(text, max) {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+async function searchSuggestions(query) {
+  const key = query.toLowerCase();
+  const cached = suggestCache.get(key);
+  if (cached && Date.now() - cached.at < SUGGEST_CACHE_TTL_MS) return cached.choices;
+
+  let timer;
+  const result = await Promise.race([
+    useMainPlayer().search(query, { searchEngine: YOUTUBE_ENGINE }),
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Search timed out')), SUGGEST_TIMEOUT_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
+
+  const choices = result.tracks
+    .filter((track) => track.url && track.url.length <= 100)
+    .slice(0, 10)
+    .map((track) => ({
+      name: truncate(`${track.title} — ${track.author} (${track.duration})`, 100),
+      value: track.url,
+    }));
+
+  if (suggestCache.size >= SUGGEST_CACHE_MAX) suggestCache.delete(suggestCache.keys().next().value);
+  suggestCache.set(key, { at: Date.now(), choices });
+  return choices;
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('play')
     .setDescription('Play a song or playlist from YouTube, Spotify, SoundCloud, Deezer, or Apple Music')
     .addStringOption((opt) =>
-      opt.setName('query').setDescription('Song name, or a URL/playlist link').setRequired(true),
+      opt
+        .setName('query')
+        .setDescription('Song name, or a URL/playlist link')
+        .setRequired(true)
+        .setAutocomplete(true),
     ),
+
+  async autocomplete(interaction) {
+    const query = interaction.options.getFocused().trim();
+
+    // Nothing useful to suggest for very short input or pasted links
+    if (query.length < 2 || /^https?:\/\//i.test(query)) {
+      return interaction.respond([]).catch(() => null);
+    }
+
+    try {
+      const choices = await searchSuggestions(query);
+      await interaction.respond(choices);
+    } catch (err) {
+      logger.warn('Play', 'Autocomplete search failed', { query: query.slice(0, 80), err: err.message });
+      await interaction.respond([]).catch(() => null);
+    }
+  },
 
   async execute(interaction) {
     const member = interaction.member;
@@ -59,9 +118,11 @@ module.exports = {
         type: resolved.type,
       });
 
-      // Force Deezer extractor for Deezer URLs (attachmentextractor has higher priority and would steal it)
+      // Force correct extractor to prevent attachmentextractor from stealing URLs
+      const isYouTubeUrl = /(?:youtube\.com|youtu\.be)/.test(resolvedQuery);
       const isDeezerUrl = resolvedQuery.includes('deezer.com') || resolvedQuery.includes('dzr.page.link');
       const playOptions = {
+        requestedBy: interaction.user,
         nodeOptions: {
           metadata: { textChannelId: interaction.channelId },
           volume: settings.defaultVolume,
@@ -73,7 +134,9 @@ module.exports = {
           selfDeaf: true,
         },
       };
-      if (isDeezerUrl) {
+      if (isYouTubeUrl) {
+        playOptions.searchEngine = YOUTUBE_ENGINE;
+      } else if (isDeezerUrl) {
         playOptions.searchEngine = 'ext:com.retrouser955.discord-player.deezr-ext';
       }
 

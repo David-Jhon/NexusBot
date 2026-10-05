@@ -30,6 +30,24 @@ npm start               # start the bot
 - **Persistence:** Queue state snapshotted to SQLite (debounced 3s). Rehydrated on boot. Watchdog checks every 30s for dead voice connections.
 - **Vote-skip:** Uses a `__voteSkips` Set on the queue object (non-standard). Default threshold 0.5.
 
+## Extractors
+
+Registered in `src/index.js` bootstrap (order matters for priority):
+1. `DefaultExtractors` — SoundCloud, Attachment, Vimeo, ReverbNation, Apple Music, built-in Spotify
+2. `SpotifyExtractor` (from `discord-player-spotify`) — requires `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET`
+3. `YoutubeExtractor` (from `discord-player-youtubei` v3) — default stream trial order. No credentials needed.
+4. `DeezerExtractor` — requires `DEEZER_ARL_COOKIE` + `DEEZER_MASTER_KEY`. **Supports text search** via Deezer's public API (`api.deezer.com/search/track`).
+
+**Deezer priority:** Default priority is lower than YouTube/Spotify. To make Deezer the preferred source (like WD-40 does), set `deezerExt.priority = 12` after registration. Without this, text queries will go to YouTube/Spotify instead.
+
+## Autoplay
+
+Implemented in `src/events/player/index.js` (`willAutoPlay` event):
+- Searches by **artist only** (not artist + title) for variety
+- Filters out: subtitle/reaction videos, covers, remixes, compilations, BGM, similar titles (>60% word overlap)
+- Checks track is actually by the same artist (title/author contains artist name)
+- Fallback chain: YouTube → Spotify → Deezer (each forced to its own extractor)
+
 ## Production
 
 - Docker: `docker compose up -d --build` (uses system ffmpeg, not npm's `ffmpeg-static`).
@@ -43,3 +61,11 @@ npm start               # start the bot
 - Commands use `useQueue(guildId)` / `useMainPlayer()` from discord-player (no DI).
 - Filters: `queue.filters.ffmpeg.toggle()` with 11 curated presets.
 - Button interactions prefixed `nexus:`.
+
+## Gotchas
+
+- **YouTube.js parser warnings are harmless** — `ListItemView`, `ContinuationItemView`, signature decipher errors. They appear because YouTube changes their UI and the library catches up. The logger suppresses the noisy ones; some still leak through `console.warn`.
+- **`discord-player-youtubei` v3 has undeclared deps** — it `require`s `simple-ytdl-core` (and peer `bgutils-js`) without listing them; both are in our `package.json`. Don't remove them. It now shares the root `youtubei.js` (deduped).
+- **Deezer extractor steals YouTube URLs** — must force `searchEngine` option with `YoutubeExtractor` identifier to prevent attachmentextractor or deezer from handling YouTube URLs.
+- **`queue.client` is undefined in `willAutoPlay`** — can't use `queue.client.user` for `requestedBy`. Use `queue.metadata.lastTrack` instead.
+- **`youtube-dl-exec` requires Python** — install with `YOUTUBE_DL_SKIP_PYTHON_CHECK=1` if Python isn't available.

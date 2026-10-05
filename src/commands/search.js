@@ -56,6 +56,7 @@ module.exports = {
 
       try {
         await player.play(channel, chosen.url, {
+          requestedBy: interaction.user,
           nodeOptions: {
             metadata: { textChannelId: interaction.channelId },
             volume: settings.defaultVolume,

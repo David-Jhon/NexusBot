@@ -3,7 +3,7 @@ const path = require('node:path');
 const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const { Player } = require('discord-player');
 const { DefaultExtractors } = require('@discord-player/extractor');
-const { YoutubeiExtractor } = require('discord-player-youtubei');
+const { YoutubeExtractor } = require('discord-player-youtubei');
 
 // Suppress noisy YouTube.js warnings
 const _origWarn = console.warn;
@@ -86,9 +86,7 @@ const player = new Player(client, {
     logger.info('Bootstrap', 'Spotify skipped (no credentials)');
   }
 
-  player.extractors.register(YoutubeiExtractor, {
-    streamOptions: { useClient: 'ANDROID' },
-  });
+  player.extractors.register(YoutubeExtractor, {});
 
   const { DeezerExtractor } = require('discord-player-deezer');
   if (config.deezer.arl && config.deezer.decryptionKey) {

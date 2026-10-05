@@ -89,7 +89,11 @@ async function rehydrateAllQueues(client) {
 
       const [first, ...rest] = snapshot.tracks;
 
+      // Restore who queued each track so "Requested by" survives restarts
+      const fetchRequester = (id) => (id ? client.users.fetch(id).catch(() => null) : null);
+
       const { queue } = await player.play(channel, first.url, {
+        requestedBy: await fetchRequester(first.requestedById),
         nodeOptions: {
           metadata: { textChannelId: snapshot.textChannelId },
           volume: snapshot.volume,
@@ -103,6 +107,7 @@ async function rehydrateAllQueues(client) {
 
       for (const t of rest) {
         await player.play(channel, t.url, {
+          requestedBy: await fetchRequester(t.requestedById),
           nodeOptions: { metadata: { textChannelId: snapshot.textChannelId } },
         }).catch((err) =>
           logger.warn('QueueManager', 'Skipped a track during rehydration', {

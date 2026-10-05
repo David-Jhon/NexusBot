@@ -129,6 +129,24 @@ function registerPlayerEvents(player) {
       } catch (err) {
         logger.error('Player', 'Spotify autoplay fallback failed', { err: String(err) });
       }
+
+      // Spotify failed — try Deezer as last resort
+      try {
+        const searchPlayer = useMainPlayer();
+        const deezerResults = await searchPlayer.search(query, {
+          searchEngine: 'ext:com.retrouser955.discord-player.deezr-ext',
+        });
+        if (deezerResults?.tracks?.length) {
+          const unique = deezerResults.tracks.filter(isUnique);
+          if (unique.length > 0) {
+            logger.info('Player', 'Autoplay fallback: picked Deezer track', { title: unique[0].title });
+            resolver(unique[0]);
+            return;
+          }
+        }
+      } catch (err) {
+        logger.error('Player', 'Deezer autoplay fallback failed', { err: String(err) });
+      }
     }
 
     resolver(null);

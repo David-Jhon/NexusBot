@@ -1,8 +1,16 @@
 const { EmbedBuilder } = require('discord.js');
+const { QueueRepeatMode } = require('discord-player');
 const config = require('../config');
 
 function baseEmbed() {
   return new EmbedBuilder().setColor(config.brand.color);
+}
+
+function requesterLabel(track, queue) {
+  if (track.requestedBy) return `<@${track.requestedBy.id}>`;
+  // Autoplay picks have no requester
+  if (queue.repeatMode === QueueRepeatMode.AUTOPLAY) return 'Autoplay';
+  return 'Unknown';
 }
 
 function nowPlayingEmbed(track, queue) {
@@ -14,7 +22,7 @@ function nowPlayingEmbed(track, queue) {
     .setThumbnail(track.thumbnail)
     .addFields(
       { name: 'Duration', value: track.duration || 'Live', inline: true },
-      { name: 'Requested by', value: track.requestedBy ? `<@${track.requestedBy.id}>` : 'Unknown', inline: true },
+      { name: 'Requested by', value: requesterLabel(track, queue), inline: true },
       { name: 'Source', value: track.source || 'unknown', inline: true },
     );
 

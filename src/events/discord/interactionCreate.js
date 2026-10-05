@@ -8,6 +8,18 @@ const db = require('../../database/db');
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction) {
+    if (interaction.isAutocomplete()) {
+      const command = interaction.client.commands.get(interaction.commandName);
+      if (!command?.autocomplete) return;
+
+      try {
+        await command.autocomplete(interaction);
+      } catch (err) {
+        logger.error('Command', `Error in /${interaction.commandName} autocomplete`, { err: String(err) });
+      }
+      return;
+    }
+
     if (interaction.isChatInputCommand()) {
       const command = interaction.client.commands.get(interaction.commandName);
       if (!command) return;

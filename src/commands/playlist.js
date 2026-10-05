@@ -63,6 +63,7 @@ module.exports = {
       for (const track of playlist.tracks) {
         try {
           await player.play(channel, track.url, {
+            requestedBy: interaction.user,
             nodeOptions: { metadata: { textChannelId: interaction.channelId } },
           });
           queued++;
