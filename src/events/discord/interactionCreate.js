@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js');
 const { useQueue, QueueRepeatMode } = require('discord-player');
 const logger = require('../../utils/logger');
 const { nowPlayingEmbed, errorEmbed, successEmbed } = require('../../utils/embeds');
@@ -36,8 +37,11 @@ module.exports = {
         await command.execute(interaction);
       } catch (err) {
         logger.error('Command', `Error executing /${interaction.commandName}`, { err: String(err) });
-        const payload = { embeds: [errorEmbed('Something went wrong running that command.')], ephemeral: true };
-        if (interaction.deferred || interaction.replied) {
+        const payload = { embeds: [errorEmbed('Something went wrong running that command.')], flags: MessageFlags.Ephemeral };
+        if (interaction.deferred && !interaction.replied) {
+          // Replace the "thinking..." placeholder instead of leaving it stuck
+          await interaction.editReply({ embeds: payload.embeds }).catch(() => null);
+        } else if (interaction.replied) {
           await interaction.followUp(payload).catch(() => null);
         } else {
           await interaction.reply(payload).catch(() => null);

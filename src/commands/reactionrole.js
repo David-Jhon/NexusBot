@@ -3,6 +3,7 @@ const {
   PermissionFlagsBits,
   ChannelType,
   InteractionContextType,
+  MessageFlags,
 } = require('discord.js');
 const db = require('../database/db');
 const { successEmbed, errorEmbed, baseEmbed } = require('../utils/embeds');
@@ -31,8 +32,10 @@ function jumpLink(panel) {
   return `https://discord.com/channels/${panel.guildId}/${panel.channelId}/${panel.messageId}`;
 }
 
+// execute() defers first (posting/reacting/editing panels can take longer than Discord's 3s limit)
 function reply(interaction, embed) {
-  return interaction.reply({ embeds: [embed], ephemeral: true });
+  if (interaction.deferred || interaction.replied) return interaction.editReply({ embeds: [embed] });
+  return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
 /** Resolve the `panel` option, making sure it belongs to this guild. */
@@ -135,6 +138,7 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const { guild } = interaction;
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     if (sub === 'create') {
       const channel = interaction.options.getChannel('channel', true);
