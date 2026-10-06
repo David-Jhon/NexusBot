@@ -123,8 +123,9 @@ function readYoutubeCookieHeader(file) {
 }
 
 function youtubeOptions() {
-  // "peer" needs self-hosted peers we don't have; skip it so failures don't waste a round trip
-  const options = { downloads: { trialOrder: ['adaptive', 'sabr', 'yt-dlp'] } };
+  // "peer" needs self-hosted peers we don't have; skip it so failures don't waste a round trip.
+  // "adaptive" currently fails every time (locally and on the VPS) after ~2.5s, so try sabr first.
+  const options = { downloads: { trialOrder: ['sabr', 'adaptive', 'yt-dlp'] } };
   if (!fs.existsSync(config.youtubeCookiesFile)) return options;
   try {
     const cookie = readYoutubeCookieHeader(config.youtubeCookiesFile);

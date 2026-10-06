@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { Readable } = require('node:stream');
+const { Readable, PassThrough } = require('node:stream');
 const { QueueRepeatMode } = require('discord-player');
 const logger = require('./logger');
 const { pickAutoplayTrack } = require('./autoplay');
@@ -9,11 +9,14 @@ const { pickAutoplayTrack } = require('./autoplay');
 // stream ahead of time and hand it to discord-player through its onBeforeCreateStream hook.
 
 // How close to the end of the current song the next one is looked up. Long enough to cover a slow
-// lookup, short enough that the prepared stream isn't sitting idle for minutes.
-const PREFETCH_BEFORE_END_MS = 30_000;
+// lookup on a weak VPS (an early autoplay pick plus the stream lookup), short enough that the
+// prepared stream isn't sitting idle for minutes.
+const PREFETCH_BEFORE_END_MS = 60_000;
 const CHECK_INTERVAL_MS = 3_000;
 // A stream left waiting longer than this (e.g. playback paused) may have been dropped by YouTube
-const MAX_AGE_MS = 120_000;
+const MAX_AGE_MS = 150_000;
+// Waiting longer than this at song change means the lookup didn't finish in time (worth logging)
+const SLOW_WAIT_MS = 1_000;
 
 // guildId -> { trackId, promise (resolves to the stream or null), createdAt }
 const prepared = new Map();
@@ -34,6 +37,20 @@ function isUsable(stream) {
   if (typeof stream === 'string') return true;
   const readable = stream instanceof Readable ? stream : stream?.stream;
   return readable instanceof Readable && !readable.destroyed && !readable.errored && !readable.readableEnded;
+}
+
+// A YouTube (SABR) stream that's opened but not read for a minute can stall for 30s+ once playback
+// starts reading it. Keep it downloading into memory while it waits (a song is a few MB of audio).
+const BUFFER_BYTES = 64 * 1024 * 1024;
+
+function keepFlowing(stream) {
+  const readable = stream instanceof Readable ? stream : stream?.stream;
+  if (!(readable instanceof Readable)) return stream;
+  const buffer = new PassThrough({ highWaterMark: BUFFER_BYTES });
+  readable.on('error', (err) => buffer.destroy(err));
+  buffer.on('close', () => { if (!readable.destroyed) readable.destroy(); });
+  readable.pipe(buffer);
+  return readable === stream ? buffer : { ...stream, stream: buffer };
 }
 
 // Same lookup discord-player does when a song starts (minus its title-search fallback, which still
@@ -116,10 +133,9 @@ function check(player) {
     const startedAt = Date.now();
     const promise = extractStream(player, next)
       .then((stream) => {
-        if (stream && process.env.PLAYER_DEBUG === '1') {
-          logger.info('Prefetch', `Prepared "${next.title}" in ${Date.now() - startedAt} ms`);
-        }
-        return stream;
+        if (!stream) return null;
+        logger.info('Prefetch', `Prepared "${next.title}" in ${Date.now() - startedAt} ms`);
+        return keepFlowing(stream);
       })
       .catch((err) => {
         logger.warn('Prefetch', `Could not prepare "${next.title}"`, { err: String(err?.message ?? err).slice(0, 300) });
@@ -136,9 +152,18 @@ async function onBeforeCreateStream(track, _queryType, queue) {
   if (!entry || entry.trackId !== track.id) return null;
   prepared.delete(guildId);
 
+  const waitStart = Date.now();
   const stream = await entry.promise;
-  if (!stream) return null;
+  const waited = Date.now() - waitStart;
+  if (waited > SLOW_WAIT_MS) {
+    logger.warn('Prefetch', `"${track.title}" wasn't ready in time, waited ${waited} ms (lookup took ${Date.now() - entry.createdAt} ms)`);
+  }
+  if (!stream) {
+    logger.warn('Prefetch', `No prepared stream for "${track.title}", looking it up now`);
+    return null;
+  }
   if (!isUsable(stream)) {
+    logger.warn('Prefetch', `Prepared stream for "${track.title}" was closed, looking it up again`);
     destroyStream(stream);
     return null;
   }

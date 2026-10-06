@@ -7,7 +7,7 @@ reconnect recovery — built on `discord.js` v14 and `discord-player` v7.
 
 ## Features
 
-- **Gapless playback** — the next song's stream is prepared ~30s before the
+- **Gapless playback** — the next song's stream is prepared ~60s before the
   current one ends, so songs follow each other with under 0.1s of silence
   (it used to be ~6s). Works for queued songs and autoplay.
 - **Autoplay that keeps going** — when the queue runs out, the bot plays from
@@ -135,6 +135,7 @@ pm2 startup   # follow the printed instructions to survive host reboots
 | `/247 enabled` | Stay in voice permanently (needs **Manage Server**) |
 | `/playlist save\|load\|list\|delete` | Your saved playlists in this server |
 | `/info` | Bot info and invite link |
+| `/help music\|reactionrole` | How to use the bot; `reactionrole` is a step-by-step setup guide |
 | `/reactionrole create\|add\|remove\|mode\|list\|delete` | Reaction roles (needs **Manage Roles**) |
 
 **Who can control the music:** commands and buttons that change playback
@@ -148,6 +149,7 @@ each command in **Server Settings → Integrations**.
 
 Carl-bot / Dyno style self-assignable roles. Requires **Manage Roles** to use
 the command, and the bot's role must sit above every role it hands out.
+`/help reactionrole` walks server admins through it in Discord.
 
 1. `/reactionrole create` — posts a panel as a card with the server icon and a color
    accent taken from its roles. Pick a **style**:

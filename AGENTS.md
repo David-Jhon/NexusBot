@@ -31,7 +31,7 @@ npm start               # start the bot
 - **Reaction-role panels are Components V2 cards** (`buildPanelMessage`). Always edit a panel with the full payload: it sets `content: null, embeds: []` so panels posted with the old embed layout upgrade instead of being rejected, and `allowedMentions: { parse: [] }` so role mentions don't ping. Limits: 40 components and 4000 text chars per message. Button panels show an inline button per role up to 11 roles, then fall back to a 5×5 button grid inside the card.
 - **Persistence:** Queue state snapshotted to SQLite (debounced 3s). Rehydrated on boot. Watchdog checks every 30s for dead voice connections. Call `queueManager.scheduleSnapshot()` after changing volume, loop mode or order (no player event covers those). `queueDelete` clears the snapshot (left empty channel, kicked, /stop) unless `markShuttingDown()` was called; shutdown also flushes pending snapshots.
 - **Who may control playback:** `src/utils/voice.js`. Control commands call `controlError()` (must be in the bot's channel unless nobody is listening); `/play`, `/search`, `/playlist load` call `busyElsewhereError()`. New control commands should use it too. `/247` defaults to Manage Server.
-- **Gapless transitions:** `src/utils/prefetch.js` extracts the next track's stream ~30s before the current one ends and serves it via discord-player's global `onBeforeCreateStream` hook (cut the gap from ~6.6s to <0.1s). Autoplay is covered by picking its next song early (see Autoplay). Not applied to repeat-track.
+- **Gapless transitions:** `src/utils/prefetch.js` extracts the next track's stream ~60s before the current one ends and serves it via discord-player's global `onBeforeCreateStream` hook (cut the gap from ~6.6s to <0.1s). The prepared stream is piped into a large in-memory buffer (`keepFlowing`) while it waits: a SABR stream left unread for a minute stalls 30s+ when playback starts reading it. Misses and late lookups are logged as `[Prefetch]` warnings. Autoplay is covered by picking its next song early (see Autoplay). Not applied to repeat-track.
 - **Vote-skip:** Uses a `__voteSkips` Set on the queue object (non-standard). Default threshold 0.5.
 
 ## Extractors
@@ -47,7 +47,7 @@ Registered in `src/index.js` bootstrap (order matters for priority):
 ## Autoplay
 
 Picking lives in `src/utils/autoplay.js` (`pickAutoplayTrack`), used by the `willAutoPlay` event and by the early pick in `src/utils/prefetch.js`:
-- **Early pick:** ~30s before the last queued song ends, the next autoplay song is picked and added to the queue, so it gets prefetched like any queued song (gapless). The pick is removed if someone queues their own songs or autoplay is turned off. `willAutoPlay` only runs when the early pick found nothing.
+- **Early pick:** ~60s before the last queued song ends, the next autoplay song is picked and added to the queue, so it gets prefetched like any queued song (gapless). The pick is removed if someone queues their own songs or autoplay is turned off. `willAutoPlay` only runs when the early pick found nothing.
 - **Primary source: YouTube Music radio** (`innertube.music.getUpNext(videoId, true)`), the same "up next" YouTube Music plays. Non-YouTube songs are matched with `music.search(title artist, { type: 'song' })` first. The chosen video is re-resolved through the YouTube extractor because the radio lists the song's length, not the video's.
 - `discord-player-youtubei`'s own `getRelatedTracks`/mix parsing returns nothing since YouTube's layout change (LockupView), so don't rely on it.
 - Played songs are skipped by URL and by normalized title (the same song from Spotify and YouTube has different URLs).
@@ -68,7 +68,10 @@ Picking lives in `src/utils/autoplay.js` (`pickAutoplayTrack`), used by the `wil
 - Commands that restart the stream (`/seek`, `/filters`) must `deferReply()` first; the restart can exceed Discord's 3s limit.
 - Vote-skip logic lives in `voteSkip()` in `src/commands/skip.js`, shared with the Skip button. Votes reset on `playerStart`.
 - Filters: `queue.filters.ffmpeg.toggle()` with 11 curated presets.
-- Button interactions prefixed `nexus:`. The music handler in `interactionCreate.js` only claims IDs listed in `MUSIC_BUTTONS`; reaction-role components use `nexus:rr:`. Add new now-playing buttons to `MUSIC_BUTTONS`.
+- Button interactions prefixed `nexus:`. The music handler in `interactionCreate.js` only claims IDs listed in `MUSIC_BUTTONS`; reaction-role components use `nexus:rr:`, `/help` page buttons use `nexus:help:<topic>:<page>`. Add new now-playing buttons to `MUSIC_BUTTONS`.
+- `/help` pages live in `src/commands/help.js` (one embed per page). Update the reaction-role guide when `/reactionrole` options or modes change.
+- YouTube `trialOrder` is `sabr, adaptive, yt-dlp`: adaptive currently always fails (~2.5s wasted when it went first).
+- Autocomplete "Unknown interaction" (10062) is ignored: Discord drops suggestions not answered within 3s.
 
 ## Gotchas
 

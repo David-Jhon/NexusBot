@@ -3,8 +3,9 @@
 ## Unreleased
 
 ### Added
-- **Gapless song transitions** — the next song's stream is looked up ~30s before the current one ends (`src/utils/prefetch.js`), cutting the silence between songs from ~6.6s to under 0.1s
-- **Gapless autoplay** — the next autoplay song is picked ~30s early and prefetched, so autoplay has no gap either
+- **Gapless song transitions** — the next song's stream is looked up ~60s before the current one ends (`src/utils/prefetch.js`), cutting the silence between songs from ~6.6s to under 0.1s
+- **Gapless autoplay** — the next autoplay song is picked ~60s early and prefetched, so autoplay has no gap either
+- **`/help`** — `/help music` and a paged, step-by-step `/help reactionrole` guide
 - **YouTube Music radio for autoplay** — related songs come from YouTube Music's "up next" (similar artists, like YouTube Music's own autoplay); works for Spotify/Deezer songs too
 - **Reaction roles** (`/reactionrole`) — reaction, button and dropdown panels with Carl-bot modes (normal, unique, verify, drop, reversed, binding), a per-panel limit and optional per-role descriptions. Panels are Components V2 cards and keep working after restarts
 - **YouTube cookies** — `cookies.txt` (or `YOUTUBE_COOKIES_FILE`) is passed to youtubei.js and yt-dlp, for VPS IPs that YouTube blocks with "Sign in to confirm you're not a bot"
@@ -34,6 +35,8 @@
 - Any member could toggle server-wide 24/7 mode; `/247` now needs Manage Server by default
 - After the bot left an empty channel or was disconnected, a restart rejoined that channel and replayed the old queue
 - Volume, loop mode and shuffle weren't saved, so a restart reverted them; changes in the last 3s before a restart were lost
+- Long silences between songs even with prefetching (seen on the VPS): a prepared YouTube stream left unread until the song change could stall for 30s+. It now keeps downloading into memory while it waits. YouTube tries the SABR download method first (the adaptive one always failed, wasting ~2.5s)
+- `/reactionrole` and `/play` autocomplete logging "Unknown interaction" errors when Discord's 3s window for suggestions passed
 - Autoplay stopping after a few songs: YouTube's related tracks always came back empty, and the artist search ran out of songs that passed its filters
 
 ## v1.1.0 — Multi-Source Extractors & Autoplay Improvements

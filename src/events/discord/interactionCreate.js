@@ -8,6 +8,7 @@ const db = require('../../database/db');
 const { isReactionRoleComponent, handleComponent } = require('../../utils/reactionRoleEvents');
 const queueManager = require('../../structures/queueManager');
 const { voteSkip } = require('../../commands/skip');
+const { isHelpButton, handleHelpButton } = require('../../commands/help');
 
 // Now-playing panel buttons (see utils/buttons.js)
 const MUSIC_BUTTONS = new Set(
@@ -24,6 +25,9 @@ module.exports = {
       try {
         await command.autocomplete(interaction);
       } catch (err) {
+        // 10062: Discord gives suggestions 3s; slower answers are dropped and the user just sees no
+        // suggestions for that keystroke (the next keystroke asks again). Nothing to fix per request.
+        if (err?.code === 10062) return;
         logger.error('Command', `Error in /${interaction.commandName} autocomplete`, { err: String(err) });
       }
       return;
@@ -47,6 +51,13 @@ module.exports = {
           await interaction.reply(payload).catch(() => null);
         }
       }
+      return;
+    }
+
+    if (isHelpButton(interaction)) {
+      await handleHelpButton(interaction).catch((err) => {
+        logger.warn('Help', 'Failed to turn the help page', { err: String(err) });
+      });
       return;
     }
 
