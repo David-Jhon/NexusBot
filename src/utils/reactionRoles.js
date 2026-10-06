@@ -23,7 +23,7 @@ const MAX_ROLES = { reaction: 20, button: 25, dropdown: 25 };
 const BUTTON_PREFIX = 'nexus:rr:btn:';
 const MENU_ID = 'nexus:rr:menu';
 
-// Footer line for modes that don't behave like a plain toggle. Normal mode needs no explanation.
+// Footer rule for modes that don't behave like a plain toggle. Normal mode needs no explanation.
 const MODE_HINTS = {
   unique: 'You can only have one of these roles.',
   verify: 'Once you get a role here, it can\'t be removed.',
@@ -37,13 +37,21 @@ const REVERSED_HINTS = {
   dropdown: 'Choosing a role removes it, unchoosing gives it back.',
 };
 
-function footerText(panel) {
+const STYLE_HINTS = {
+  reaction: 'React below to pick',
+  button: 'Click a button to toggle',
+  dropdown: 'Use the menu below',
+};
+
+function footerText(panel, mappings) {
+  const style = mappings.length ? STYLE_HINTS[panel.style] : null;
   const hint = panel.mode === 'reversed' ? REVERSED_HINTS[panel.style] : MODE_HINTS[panel.mode];
   const limit = panel.maxRoles > 0 && panel.mode !== 'unique'
     ? `You can pick up to ${panel.maxRoles} role${panel.maxRoles === 1 ? '' : 's'}.`
     : null;
-  const lines = [hint, limit].filter(Boolean);
-  return lines.length ? `-# ${lines.join(' ')}` : '';
+  const rules = [hint, limit].filter(Boolean).join(' ');
+  const parts = [style, rules].filter(Boolean);
+  return parts.length ? `-# ${parts.join(' · ')}` : '';
 }
 
 // Label for the button next to each role, matching what a click does in that mode
@@ -108,7 +116,7 @@ const textLength = (texts) => texts.reduce((sum, t) => sum + t.length, 0);
 function buildPanelMessage(panel, mappings, guild) {
   const inline = panel.style === 'button' && mappings.length > 0 && mappings.length <= MAX_INLINE_BUTTONS;
 
-  const footer = footerText(panel);
+  const footer = footerText(panel, mappings);
   const title = `## ${panel.title}`;
 
   // One text per role row when buttons sit inline, otherwise a single list

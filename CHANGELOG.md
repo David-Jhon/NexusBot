@@ -18,7 +18,7 @@
 - Shared playback helper (`buildPlayOptions`) used by `/search`, `/playnext`, `/playlist load` and queue restore
 - Skip button uses the same vote rules as `/skip`; votes reset per track
 - Now-playing buttons require being in the bot's voice channel
-- Reaction-role panel footer only explains non-obvious modes and limits; normal panels have no footer
+- Reaction-role panel footer shows how to pick plus a plain rule for non-obvious modes and limits; the mode badge and role count are gone
 
 ### Fixed
 - `/reactionrole` "Unknown interaction" on slow hosts (replies are deferred)
