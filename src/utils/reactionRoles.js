@@ -23,29 +23,28 @@ const MAX_ROLES = { reaction: 20, button: 25, dropdown: 25 };
 const BUTTON_PREFIX = 'nexus:rr:btn:';
 const MENU_ID = 'nexus:rr:menu';
 
+// Footer line for modes that don't behave like a plain toggle. Normal mode needs no explanation.
 const MODE_HINTS = {
-  normal: 'Pick a role to get it, pick it again to remove it.',
-  unique: 'You can only have one role from this panel.',
-  verify: 'Roles from this panel can only be added, not removed.',
-  drop: 'Picking a role removes it from you.',
-  reversed: 'Reacting removes the role, unreacting gives it back.',
-  binding: 'Your first pick is permanent.',
+  unique: 'You can only have one of these roles.',
+  verify: 'Once you get a role here, it can\'t be removed.',
+  drop: 'Picking a role here removes it from you.',
+  binding: 'Your choice is permanent.',
 };
 
-const MODE_BADGES = {
-  normal: '🔄 Normal',
-  unique: '🎯 Unique',
-  verify: '✅ Verify',
-  drop: '📤 Drop',
-  reversed: '🔃 Reversed',
-  binding: '🔒 Binding',
+// Buttons toggle, so reversed only differs from normal for reactions and the dropdown
+const REVERSED_HINTS = {
+  reaction: 'React to remove the role, unreact to get it back.',
+  dropdown: 'Choosing a role removes it, unchoosing gives it back.',
 };
 
-const STYLE_FOOTERS = {
-  reaction: 'React below to pick',
-  button: 'Click a button to toggle',
-  dropdown: 'Use the menu below',
-};
+function footerText(panel) {
+  const hint = panel.mode === 'reversed' ? REVERSED_HINTS[panel.style] : MODE_HINTS[panel.mode];
+  const limit = panel.maxRoles > 0 && panel.mode !== 'unique'
+    ? `You can pick up to ${panel.maxRoles} role${panel.maxRoles === 1 ? '' : 's'}.`
+    : null;
+  const lines = [hint, limit].filter(Boolean);
+  return lines.length ? `-# ${lines.join(' ')}` : '';
+}
 
 // Label for the button next to each role, matching what a click does in that mode
 const BUTTON_LABELS = {
@@ -109,9 +108,7 @@ const textLength = (texts) => texts.reduce((sum, t) => sum + t.length, 0);
 function buildPanelMessage(panel, mappings, guild) {
   const inline = panel.style === 'button' && mappings.length > 0 && mappings.length <= MAX_INLINE_BUTTONS;
 
-  const limit = panel.maxRoles > 0 && panel.mode !== 'unique' ? ` · Limit ${panel.maxRoles}` : '';
-  const count = `${mappings.length} role${mappings.length === 1 ? '' : 's'}`;
-  const footer = `-# ${MODE_BADGES[panel.mode]} mode${limit} · ${MODE_HINTS[panel.mode]}\n-# ${count} · ${STYLE_FOOTERS[panel.style]}`;
+  const footer = footerText(panel);
   const title = `## ${panel.title}`;
 
   // One text per role row when buttons sit inline, otherwise a single list
@@ -124,7 +121,7 @@ function buildPanelMessage(panel, mappings, guild) {
     roleTexts = [truncate(list, MAX_TEXT - title.length - footer.length)];
   }
 
-  // The panel description gets whatever text budget is left; the mode footer is never cut
+  // The panel description gets whatever text budget is left; the mode hint is never cut
   const room = MAX_TEXT - textLength([title, footer, ...roleTexts]) - 1;
   const description = panel.description && room > 1 ? `\n${truncate(panel.description, room)}` : '';
 
@@ -193,8 +190,10 @@ function buildPanelMessage(panel, mappings, guild) {
     card.addActionRowComponents(new ActionRowBuilder().addComponents(menu));
   }
 
-  card.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
-  card.addTextDisplayComponents(new TextDisplayBuilder().setContent(footer));
+  if (footer) {
+    card.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
+    card.addTextDisplayComponents(new TextDisplayBuilder().setContent(footer));
+  }
 
   return {
     content: null,
