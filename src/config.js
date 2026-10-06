@@ -17,6 +17,10 @@ module.exports = {
     decryptionKey: process.env.DEEZER_MASTER_KEY || null,
   },
 
+  // Netscape-format cookies.txt from a (throwaway) YouTube account. Needed on server IPs that
+  // YouTube flags as bots ("Sign in to confirm you're not a bot"). Unset -> ./cookies.txt if present.
+  youtubeCookiesFile: path.resolve(process.cwd(), process.env.YOUTUBE_COOKIES_FILE || 'cookies.txt'),
+
   databaseFile: process.env.DATABASE_FILE
     ? path.resolve(process.cwd(), process.env.DATABASE_FILE)
     : path.resolve(process.cwd(), 'data', 'nexusbot.sqlite'),

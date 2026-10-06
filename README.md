@@ -42,6 +42,15 @@ Set `DEEZER_ARL_COOKIE` and `DEEZER_MASTER_KEY` in `.env` to enable Deezer
 playback. Both values come from external sources (DMCA-sensitive, not included
 in the package). Deezer supports both URLs and text search via its public API.
 
+### YouTube on a VPS: cookies
+YouTube blocks most cloud/VPS IPs ("Sign in to confirm you're not a bot"), so
+songs show as "Now playing" but no audio plays. Export a `cookies.txt`
+(Netscape format, e.g. with the "Get cookies.txt LOCALLY" browser extension)
+from a **throwaway** YouTube account and put it in the project root. It's
+picked up on start (`Using YouTube cookies` in the log) and is git-ignored.
+Use `YOUTUBE_COOKIES_FILE` for another path; with Docker put it in `./data/`
+and set `YOUTUBE_COOKIES_FILE=./data/cookies.txt`.
+
 ## Running in production
 
 ### Option A — Docker

@@ -106,8 +106,35 @@ const YOUTUBE_RETRY_MS = 60_000;
 
 // YouTube sometimes answers the startup player-script fetch with a 5xx. Retry a few times, then keep
 // trying in the background: without YouTube, Spotify tracks bridge to SoundCloud and often play the wrong song.
+// cookies.txt (Netscape format) -> "name=value; ..." header for youtubei.js
+function readYoutubeCookieHeader(file) {
+  return fs
+    .readFileSync(file, 'utf8')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^#HttpOnly_/, '').split('\t'))
+    .filter((parts) => parts.length >= 7 && !parts[0].startsWith('#') && parts[0].includes('youtube.com'))
+    .map((parts) => `${parts[5]}=${parts[6]}`)
+    .join('; ');
+}
+
+function youtubeOptions() {
+  // "peer" needs self-hosted peers we don't have; skip it so failures don't waste a round trip
+  const options = { downloads: { trialOrder: ['adaptive', 'sabr', 'yt-dlp'] } };
+  if (!fs.existsSync(config.youtubeCookiesFile)) return options;
+  try {
+    const cookie = readYoutubeCookieHeader(config.youtubeCookiesFile);
+    if (!cookie) throw new Error('no youtube.com cookies in file');
+    options.cookie = cookie;
+    options.downloads.ytdlp = { cookiePath: config.youtubeCookiesFile };
+    logger.info('Bootstrap', 'Using YouTube cookies', { file: path.basename(config.youtubeCookiesFile), count: cookie.split('; ').length });
+  } catch (err) {
+    logger.warn('Bootstrap', 'Ignoring YouTube cookies file', { err: err.message });
+  }
+  return options;
+}
+
 async function tryRegisterYoutube() {
-  const ext = await player.extractors.register(YoutubeExtractor, {}).catch(() => null);
+  const ext = await player.extractors.register(YoutubeExtractor, youtubeOptions()).catch(() => null);
   if (!ext) return false;
   // Every extractor defaults to priority 1, so Spotify tracks were bridged to SoundCloud first,
   // whose fuzzy match often picks a different song with the same name. Try YouTube first.

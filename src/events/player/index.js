@@ -15,6 +15,9 @@ function getTextChannel(queue) {
   return queue.channel?.guild?.channels?.cache?.get(id) || null;
 }
 
+// A track that "finishes" this soon after starting never produced audio
+const EMPTY_STREAM_MS = 2_000;
+
 function registerPlayerEvents(player) {
   const events = player.events;
 
@@ -25,6 +28,8 @@ function registerPlayerEvents(player) {
     // Store track info for autoplay fallback
     queue.metadata = queue.metadata || {};
     queue.metadata.lastTrack = { title: track.title, author: track.author, url: track.url };
+    queue.metadata.startedAt = Date.now();
+    queue.metadata.skipped = false;
     const channel = getTextChannel(queue);
     if (channel) {
       try {
@@ -61,14 +66,15 @@ function registerPlayerEvents(player) {
     }
 
     const lastTrack = queue.metadata?.lastTrack;
-    if (lastTrack) {
+    // Search by artist + "music" for variety (avoids generic single-word results).
+    // A track YouTube served without metadata (blocked IP) has neither, so there's nothing to search for.
+    const artist = lastTrack?.author?.trim();
+    const query = artist ? `${artist} music` : lastTrack?.title?.trim();
+    if (query) {
       // Get list of recently played URLs to avoid repeats
       const playedUrls = queue.history?.tracks?.map(t => t.url) || [];
       const lastUrl = lastTrack.url;
 
-      // Search by artist + "music" for variety (avoids generic single-word results)
-      const artist = lastTrack.author;
-      const query = artist ? `${artist} music` : lastTrack.title;
       logger.info('Player', 'Autoplay fallback: searching', { query });
 
       // Subtitle/reaction filter pattern — catches re-uploads, covers, remixes
@@ -183,6 +189,7 @@ function registerPlayerEvents(player) {
   // A track that never produced a stream (e.g. every YouTube download method failed) is skipped
   // here without a playerError, so log it and tell the channel instead of failing silently.
   events.on('playerSkip', (queue, track, reason, description) => {
+    if (queue.metadata) queue.metadata.skipped = true; // so playerFinish doesn't flag a quick manual skip
     if (reason !== 'ERR_NO_STREAM') return; // manual skips, jumps, seeks past the end
     logger.warn('Player', 'Track skipped', {
       guildId: queue.guild.id,
@@ -194,6 +201,27 @@ function registerPlayerEvents(player) {
     getTextChannel(queue)
       ?.send(`⚠️ Couldn't stream **${track?.title}**, skipping it.`)
       .catch(() => null);
+  });
+
+  // A source can hand over a stream that ends at once with no audio (e.g. yt-dlp blocked by
+  // YouTube's bot check). discord-player treats that as a normal finish, so flag it here.
+  events.on('playerFinish', (queue, track) => {
+    const { startedAt } = queue.metadata ?? {};
+    if (!startedAt || Date.now() - startedAt > EMPTY_STREAM_MS) return;
+    if (track?.durationMS && track.durationMS <= EMPTY_STREAM_MS) return; // genuinely tiny clip
+    // skip() ends the stream (-> playerFinish) before it emits playerSkip; wait a tick for that flag
+    setImmediate(() => {
+      if (queue.metadata?.skipped || queue.deleted) return; // quick manual skip, /stop, End Session
+      logger.warn('Player', 'Track ended immediately (empty stream)', {
+        guildId: queue.guild.id,
+        track: track?.title,
+        url: track?.url,
+        extractor: track?.extractor?.identifier,
+      });
+      getTextChannel(queue)
+        ?.send(`⚠️ Couldn't stream **${track?.title || track?.url}**, it ended with no audio.`)
+        .catch(() => null);
+    });
   });
 
   // General queue-level error (extraction, connection, etc.)
