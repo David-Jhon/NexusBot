@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
-const { Player } = require('discord-player');
+const { Player, onBeforeCreateStream } = require('discord-player');
 const { DefaultExtractors } = require('@discord-player/extractor');
 const { YoutubeExtractor } = require('discord-player-youtubei');
 
@@ -19,6 +19,7 @@ console.log = (...args) => { if (!isSuppressed(...args)) _origLog.apply(console,
 const config = require('./config');
 const logger = require('./utils/logger');
 const { registerPlayerEvents } = require('./events/player');
+const { startPrefetcher, onBeforeCreateStream: prefetchedStream } = require('./utils/prefetch');
 
 // ---- Graceful shutdown ----
 function shutdown(signal) {
@@ -188,6 +189,11 @@ async function registerYoutube(attempts = 3) {
   }
 
   registerPlayerEvents(player);
+
+  // Look up the next song's stream before the current one ends, so there's no silence in between.
+  // Global hook: applies to every queue, including ones rehydrated after a restart.
+  onBeforeCreateStream(prefetchedStream);
+  startPrefetcher(player);
 
   logger.info('Bootstrap', 'Extractors loaded', {
     extractors: [...player.extractors.store.keys()],

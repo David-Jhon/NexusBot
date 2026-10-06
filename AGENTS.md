@@ -30,6 +30,7 @@ npm start               # start the bot
 - **Reaction roles:** `/reactionrole` + `src/utils/reactionRoles.js` (all mode/limit rules live in `applyRoleAction`) + `src/utils/reactionRoleEvents.js`. Needs `GuildMessageReactions` intent and `Message`/`Reaction`/`User` partials so old panels work after restarts. Members are fetched with `force: true` because there's no `GuildMembers` intent.
 - **Reaction-role panels are Components V2 cards** (`buildPanelMessage`). Always edit a panel with the full payload: it sets `content: null, embeds: []` so panels posted with the old embed layout upgrade instead of being rejected, and `allowedMentions: { parse: [] }` so role mentions don't ping. Limits: 40 components and 4000 text chars per message. Button panels show an inline button per role up to 11 roles, then fall back to a 5×5 button grid inside the card.
 - **Persistence:** Queue state snapshotted to SQLite (debounced 3s). Rehydrated on boot. Watchdog checks every 30s for dead voice connections.
+- **Gapless transitions:** `src/utils/prefetch.js` extracts the next track's stream ~30s before the current one ends and serves it via discord-player's global `onBeforeCreateStream` hook (cut the gap from ~6.6s to <0.1s). Not applied to autoplay picks or repeat-track.
 - **Vote-skip:** Uses a `__voteSkips` Set on the queue object (non-standard). Default threshold 0.5.
 
 ## Extractors

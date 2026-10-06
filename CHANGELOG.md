@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Gapless song transitions** — the next song's stream is looked up ~30s before the current one ends (`src/utils/prefetch.js`), cutting the silence between songs from ~6.6s to under 0.1s
+- **Reaction roles** (`/reactionrole`) — reaction, button and dropdown panels with Carl-bot modes (normal, unique, verify, drop, reversed, binding), a per-panel limit and optional per-role descriptions. Panels are Components V2 cards and keep working after restarts
+- **YouTube cookies** — `cookies.txt` (or `YOUTUBE_COOKIES_FILE`) is passed to youtubei.js and yt-dlp, for VPS IPs that YouTube blocks with "Sign in to confirm you're not a bot"
+- **`/play` autocomplete** — YouTube search suggestions
+- **Invite link** with the required permissions, shown in `/info` and synced to the bot's About Me
+- **`PLAYER_DEBUG=1`** — prints discord-player's full playback trace
+- **Stream failure reporting** — YouTube download-method failures are logged, and the channel is told when a song can't be streamed or ends with no audio
+
+### Changed
+- Upgraded better-sqlite3 13, dotenv 18, youtubei.js 18, youtube-dl-exec and discord-player-youtubei 3
+- YouTube extractor priority raised to 10 so Spotify tracks bridge to YouTube instead of a wrong SoundCloud match
+- YouTube extractor registration retries 3 times, then every 60s in the background
+- Shared playback helper (`buildPlayOptions`) used by `/search`, `/playnext`, `/playlist load` and queue restore
+- Skip button uses the same vote rules as `/skip`; votes reset per track
+- Now-playing buttons require being in the bot's voice channel
+
+### Fixed
+- `/reactionrole` "Unknown interaction" on slow hosts (replies are deferred)
+- Command errors no longer leave a stuck "thinking…" reply
+- `/filters` invalid presets; `/seek` input validation and timeouts
+- `/search` picks consumed by other users' clicks
+- `/playnext` not starting an idle 24/7 queue
+- End Session coming back after a restart
+- Autoplay fallback running with no title or artist
+
 ## v1.1.0 — Multi-Source Extractors & Autoplay Improvements
 
 ### Added
