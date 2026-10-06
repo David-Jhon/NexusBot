@@ -79,6 +79,29 @@ player.extractors.on('error', (_context, extractor, err) => {
   logger.warn('Extractor', `${extractor?.constructor?.name ?? 'Extractor'} error`, { err: err?.message ?? String(err) });
 });
 
+// PLAYER_DEBUG=1 prints discord-player's full debug trace (stream extraction, fallbacks, voice) for diagnosing playback
+if (process.env.PLAYER_DEBUG === '1') {
+  player.on('debug', (message) => console.log('[debug:player]', message));
+  player.events.on('debug', (queue, message) => console.log(`[debug:queue ${queue.guild.id}]`, message));
+}
+
+// discord-player-youtubei reports why each download method (peer/adaptive/sabr/yt-dlp) failed only
+// through player debug messages: a "Stream extraction ... failed" line followed by the Error itself.
+let logNextDebugError = false;
+player.on('debug', (message) => {
+  if (typeof message === 'string') {
+    logNextDebugError = message.startsWith('[YouTube]: Stream extraction');
+    if (logNextDebugError) {
+      logger.warn('YouTube', message.replace('[YouTube]: ', '').replace(/ of \{[\s\S]*\} failed/, ' failed').slice(0, 300));
+    }
+    return;
+  }
+  if (logNextDebugError) {
+    logger.warn('YouTube', 'Stream method error', { err: String(message?.message ?? message).slice(0, 500) });
+    logNextDebugError = false;
+  }
+});
+
 const YOUTUBE_RETRY_MS = 60_000;
 
 // YouTube sometimes answers the startup player-script fetch with a 5xx. Retry a few times, then keep

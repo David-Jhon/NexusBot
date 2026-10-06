@@ -180,6 +180,22 @@ function registerPlayerEvents(player) {
       .catch(() => null);
   });
 
+  // A track that never produced a stream (e.g. every YouTube download method failed) is skipped
+  // here without a playerError, so log it and tell the channel instead of failing silently.
+  events.on('playerSkip', (queue, track, reason, description) => {
+    if (reason !== 'ERR_NO_STREAM') return; // manual skips, jumps, seeks past the end
+    logger.warn('Player', 'Track skipped', {
+      guildId: queue.guild.id,
+      track: track?.title,
+      url: track?.url,
+      reason,
+      description: String(description ?? '').slice(0, 300),
+    });
+    getTextChannel(queue)
+      ?.send(`⚠️ Couldn't stream **${track?.title}**, skipping it.`)
+      .catch(() => null);
+  });
+
   // General queue-level error (extraction, connection, etc.)
   events.on('error', (queue, error) => {
     logger.error('Player', 'Queue-level error', { guildId: queue?.guild?.id, err: String(error) });
