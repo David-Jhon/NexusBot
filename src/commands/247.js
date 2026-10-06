@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { useQueue } = require('discord-player');
 const db = require('../database/db');
 const { successEmbed } = require('../utils/embeds');
@@ -7,6 +7,9 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('247')
     .setDescription('Toggle 24/7 mode (bot stays in voice, never auto-leaves)')
+    // A server-wide setting: only managers by default (adjustable in Server Settings > Integrations)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDMPermission(false)
     .addBooleanOption((opt) => opt.setName('enabled').setDescription('Enable or disable').setRequired(true)),
 
   async execute(interaction) {

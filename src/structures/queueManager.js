@@ -15,38 +15,45 @@ const pendingSnapshotTimers = new Map();
 function scheduleSnapshot(guildId) {
   if (pendingSnapshotTimers.has(guildId)) return;
 
-  const timer = setTimeout(() => {
-    pendingSnapshotTimers.delete(guildId);
-    try {
-      const queue = useQueue(guildId);
-      if (!queue || !queue.channel) {
-        db.deleteQueueSnapshot(guildId);
-        return;
-      }
-
-      const tracks = [];
-      if (queue.currentTrack) tracks.push(serializeTrack(queue.currentTrack));
-      for (const t of queue.tracks.toArray()) tracks.push(serializeTrack(t));
-
-      if (tracks.length === 0) {
-        db.deleteQueueSnapshot(guildId);
-        return;
-      }
-
-      db.saveQueueSnapshot(guildId, {
-        voiceChannelId: queue.channel.id,
-        textChannelId: queue.metadata?.textChannelId || null,
-        tracks,
-        currentIndex: 0, // currentTrack is always stored at index 0
-        repeatMode: queue.repeatMode,
-        volume: queue.node.volume,
-      });
-    } catch (err) {
-      logger.error('QueueManager', 'Failed to write snapshot', { guildId, err: String(err) });
-    }
-  }, config.snapshotDebounceMs);
-
+  const timer = setTimeout(() => writeSnapshot(guildId), config.snapshotDebounceMs);
   pendingSnapshotTimers.set(guildId, timer);
+}
+
+function writeSnapshot(guildId) {
+  clearTimeout(pendingSnapshotTimers.get(guildId));
+  pendingSnapshotTimers.delete(guildId);
+  try {
+    const queue = useQueue(guildId);
+    if (!queue || !queue.channel) {
+      db.deleteQueueSnapshot(guildId);
+      return;
+    }
+
+    const tracks = [];
+    if (queue.currentTrack) tracks.push(serializeTrack(queue.currentTrack));
+    for (const t of queue.tracks.toArray()) tracks.push(serializeTrack(t));
+
+    if (tracks.length === 0) {
+      db.deleteQueueSnapshot(guildId);
+      return;
+    }
+
+    db.saveQueueSnapshot(guildId, {
+      voiceChannelId: queue.channel.id,
+      textChannelId: queue.metadata?.textChannelId || null,
+      tracks,
+      currentIndex: 0, // currentTrack is always stored at index 0
+      repeatMode: queue.repeatMode,
+      volume: queue.node.volume,
+    });
+  } catch (err) {
+    logger.error('QueueManager', 'Failed to write snapshot', { guildId, err: String(err) });
+  }
+}
+
+/** On shutdown: write snapshots still waiting out their debounce, so the last few seconds aren't lost. */
+function flushSnapshots() {
+  for (const guildId of [...pendingSnapshotTimers.keys()]) writeSnapshot(guildId);
 }
 
 function serializeTrack(track) {
@@ -58,6 +65,23 @@ function serializeTrack(track) {
 }
 
 function clearSnapshot(guildId) {
+  db.deleteQueueSnapshot(guildId);
+}
+
+// Set while the process is exiting, so queues torn down by the shutdown keep their snapshot
+let shuttingDown = false;
+function markShuttingDown() {
+  shuttingDown = true;
+}
+
+/**
+ * A queue deleted while the bot runs (left an empty channel, kicked from voice, /stop) is over:
+ * forget it, or the next restart rejoins that channel and plays the old queue to nobody.
+ */
+function onQueueDeleted(guildId) {
+  if (shuttingDown) return;
+  clearTimeout(pendingSnapshotTimers.get(guildId));
+  pendingSnapshotTimers.delete(guildId);
   db.deleteQueueSnapshot(guildId);
 }
 
@@ -156,6 +180,9 @@ function startWatchdog(client) {
 module.exports = {
   scheduleSnapshot,
   clearSnapshot,
+  markShuttingDown,
+  flushSnapshots,
+  onQueueDeleted,
   rehydrateAllQueues,
   startWatchdog,
 };

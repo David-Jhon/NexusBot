@@ -1,9 +1,10 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { useMainPlayer } = require('discord-player');
+const { useMainPlayer, useQueue } = require('discord-player');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
 const { resolveQuery } = require('../utils/queryResolver');
 const { YOUTUBE_ENGINE, buildPlayOptions, applyGuildAutoplay } = require('../utils/playback');
 const logger = require('../utils/logger');
+const { busyElsewhereError } = require('../utils/voice');
 
 // Autocomplete must answer within 3s, so cache recent searches and cap the wait
 const SUGGEST_TIMEOUT_MS = 2_500;
@@ -77,6 +78,8 @@ module.exports = {
     if (!channel) {
       return interaction.reply({ embeds: [errorEmbed('Join a voice channel first.')], ephemeral: true });
     }
+    const busy = busyElsewhereError(member, useQueue(interaction.guildId));
+    if (busy) return interaction.reply({ embeds: [errorEmbed(busy)], ephemeral: true });
 
     const query = interaction.options.getString('query', true);
     const player = useMainPlayer();

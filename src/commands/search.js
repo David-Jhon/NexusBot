@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
-const { useMainPlayer, QueryType } = require('discord-player');
+const { useMainPlayer, useQueue, QueryType } = require('discord-player');
+const { busyElsewhereError } = require('../utils/voice');
 const { errorEmbed, successEmbed } = require('../utils/embeds');
 const { buildPlayOptions, applyGuildAutoplay } = require('../utils/playback');
 
@@ -14,6 +15,8 @@ module.exports = {
     if (!channel) {
       return interaction.reply({ embeds: [errorEmbed('Join a voice channel first.')], ephemeral: true });
     }
+    const busy = busyElsewhereError(interaction.member, useQueue(interaction.guildId));
+    if (busy) return interaction.reply({ embeds: [errorEmbed(busy)], ephemeral: true });
 
     const query = interaction.options.getString('query', true);
     const player = useMainPlayer();

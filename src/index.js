@@ -19,11 +19,15 @@ console.log = (...args) => { if (!isSuppressed(...args)) _origLog.apply(console,
 const config = require('./config');
 const logger = require('./utils/logger');
 const { registerPlayerEvents } = require('./events/player');
+const queueManager = require('./structures/queueManager');
 const { startPrefetcher, onBeforeCreateStream: prefetchedStream } = require('./utils/prefetch');
 
 // ---- Graceful shutdown ----
 function shutdown(signal) {
   logger.info('Process', `Received ${signal}, shutting down gracefully...`);
+  // Keep queues for the restart: save pending changes, and don't treat the teardown as a stop
+  queueManager.markShuttingDown();
+  queueManager.flushSnapshots();
   try { client.destroy(); } catch {}
   process.exit(0);
 }

@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { useQueue } = require('discord-player');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
+const { controlError } = require('../utils/voice');
 
 // A curated subset of discord-player's 64+ built-in ffmpeg filter presets.
 // Full list is available via queue.filters.ffmpeg.availableFilters if you
@@ -27,6 +28,8 @@ module.exports = {
     if (!queue || !queue.currentTrack) {
       return interaction.reply({ embeds: [errorEmbed('Nothing is playing.')], ephemeral: true });
     }
+    const denied = controlError(interaction.member, queue);
+    if (denied) return interaction.reply({ embeds: [errorEmbed(denied)], ephemeral: true });
 
     const filter = interaction.options.getString('filter', true);
     const active = queue.filters.ffmpeg.getFiltersEnabled();

@@ -48,6 +48,8 @@ function registerPlayerEvents(player) {
   events.on('audioTracksAdd', (queue) => queueManager.scheduleSnapshot(queue.guild.id));
   events.on('audioTrackRemove', (queue) => queueManager.scheduleSnapshot(queue.guild.id));
 
+  events.on('queueDelete', (queue) => queueManager.onQueueDeleted(queue.guild.id));
+
   events.on('emptyQueue', (queue) => {
     clearNpMessage(queue);
     queueManager.clearSnapshot(queue.guild.id);

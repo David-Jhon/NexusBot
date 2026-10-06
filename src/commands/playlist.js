@@ -3,6 +3,7 @@ const { useMainPlayer, useQueue } = require('discord-player');
 const db = require('../database/db');
 const { successEmbed, errorEmbed, baseEmbed } = require('../utils/embeds');
 const { buildPlayOptions, applyGuildAutoplay } = require('../utils/playback');
+const { busyElsewhereError } = require('../utils/voice');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -52,6 +53,8 @@ module.exports = {
       if (!channel) {
         return interaction.reply({ embeds: [errorEmbed('Join a voice channel first.')], ephemeral: true });
       }
+      const busy = busyElsewhereError(interaction.member, useQueue(guildId));
+      if (busy) return interaction.reply({ embeds: [errorEmbed(busy)], ephemeral: true });
       const name = interaction.options.getString('name', true);
       const playlist = db.loadPlaylist(guildId, ownerId, name);
       if (!playlist) {

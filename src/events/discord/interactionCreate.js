@@ -114,6 +114,7 @@ module.exports = {
             break;
           case 'shuffle':
             queue.tracks.shuffle();
+            queueManager.scheduleSnapshot(interaction.guildId);
             await interaction.deferUpdate();
             break;
           case 'loop':
@@ -124,12 +125,14 @@ module.exports = {
                   ? QueueRepeatMode.QUEUE
                   : QueueRepeatMode.OFF,
             );
+            queueManager.scheduleSnapshot(interaction.guildId);
             await interaction.deferUpdate();
             break;
           case 'autoplay': {
             const isAutoplay = queue.repeatMode !== QueueRepeatMode.AUTOPLAY;
             queue.setRepeatMode(isAutoplay ? QueueRepeatMode.AUTOPLAY : QueueRepeatMode.OFF);
             db.updateGuildSettings(interaction.guildId, { autoplay: isAutoplay });
+            queueManager.scheduleSnapshot(interaction.guildId);
             await interaction.deferUpdate();
             break;
           }

@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { useQueue } = require('discord-player');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
+const { controlError } = require('../utils/voice');
 
 function parseTimeToMs(input) {
   // Accepts "90" (seconds) or "1:30" (mm:ss) or "1:02:03" (hh:mm:ss)
@@ -22,6 +23,8 @@ module.exports = {
     if (!queue || !queue.currentTrack) {
       return interaction.reply({ embeds: [errorEmbed('Nothing is playing.')], ephemeral: true });
     }
+    const denied = controlError(interaction.member, queue);
+    if (denied) return interaction.reply({ embeds: [errorEmbed(denied)], ephemeral: true });
     const time = interaction.options.getString('time', true);
     const ms = parseTimeToMs(time);
     if (ms === null) {

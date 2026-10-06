@@ -1,6 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { useQueue, QueueRepeatMode } = require('discord-player');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
+const { controlError } = require('../utils/voice');
+const queueManager = require('../structures/queueManager');
 
 const MODES = {
   off: QueueRepeatMode.OFF,
@@ -31,8 +33,11 @@ module.exports = {
     if (!queue) {
       return interaction.reply({ embeds: [errorEmbed('Nothing is playing.')], ephemeral: true });
     }
+    const denied = controlError(interaction.member, queue);
+    if (denied) return interaction.reply({ embeds: [errorEmbed(denied)], ephemeral: true });
     const mode = interaction.options.getString('mode', true);
     queue.setRepeatMode(MODES[mode]);
+    queueManager.scheduleSnapshot(interaction.guildId); // so a restart keeps the loop mode
     return interaction.reply({ embeds: [successEmbed(`Loop mode set to **${mode}**`)] });
   },
 };

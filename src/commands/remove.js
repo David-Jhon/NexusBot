@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { useQueue } = require('discord-player');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
+const { controlError } = require('../utils/voice');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -13,6 +14,8 @@ module.exports = {
     if (!queue || queue.tracks.size === 0) {
       return interaction.reply({ embeds: [errorEmbed('Queue is empty.')], ephemeral: true });
     }
+    const denied = controlError(interaction.member, queue);
+    if (denied) return interaction.reply({ embeds: [errorEmbed(denied)], ephemeral: true });
     const position = interaction.options.getInteger('position', true) - 1;
     const track = queue.tracks.at(position);
     if (!track) {

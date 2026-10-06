@@ -1,6 +1,8 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { useQueue } = require('discord-player');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
+const { controlError } = require('../utils/voice');
+const queueManager = require('../structures/queueManager');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,8 +17,11 @@ module.exports = {
     if (!queue) {
       return interaction.reply({ embeds: [errorEmbed('Nothing is playing.')], ephemeral: true });
     }
+    const denied = controlError(interaction.member, queue);
+    if (denied) return interaction.reply({ embeds: [errorEmbed(denied)], ephemeral: true });
     const level = interaction.options.getInteger('level', true);
     queue.node.setVolume(level);
+    queueManager.scheduleSnapshot(interaction.guildId); // so a restart keeps the new volume
     return interaction.reply({ embeds: [successEmbed(`Volume set to **${level}%**`)] });
   },
 };

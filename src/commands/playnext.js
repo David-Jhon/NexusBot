@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const { useMainPlayer, useQueue } = require('discord-player');
 const { successEmbed, errorEmbed } = require('../utils/embeds');
 const { buildPlayOptions, applyGuildAutoplay, searchEngineFor } = require('../utils/playback');
+const { controlError } = require('../utils/voice');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,6 +15,9 @@ module.exports = {
     if (!channel) {
       return interaction.reply({ embeds: [errorEmbed('Join a voice channel first.')], ephemeral: true });
     }
+    // Jumping the queue is a control action, so it needs the same channel as the bot
+    const denied = controlError(interaction.member, useQueue(interaction.guildId));
+    if (denied) return interaction.reply({ embeds: [errorEmbed(denied)], ephemeral: true });
 
     const query = interaction.options.getString('query', true);
     const player = useMainPlayer();

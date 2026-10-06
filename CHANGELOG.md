@@ -30,6 +30,10 @@
 - `/playnext` not starting an idle 24/7 queue
 - End Session coming back after a restart
 - Autoplay fallback running with no title or artist
+- Anyone in the server could `/stop`, `/volume`, `/seek`, `/remove`, etc. without being in the voice channel (the buttons already required it); control commands now need the bot's channel, and `/play` can't pull the bot away from people listening elsewhere
+- Any member could toggle server-wide 24/7 mode; `/247` now needs Manage Server by default
+- After the bot left an empty channel or was disconnected, a restart rejoined that channel and replayed the old queue
+- Volume, loop mode and shuffle weren't saved, so a restart reverted them; changes in the last 3s before a restart were lost
 - Autoplay stopping after a few songs: YouTube's related tracks always came back empty, and the artist search ran out of songs that passed its filters
 
 ## v1.1.0 — Multi-Source Extractors & Autoplay Improvements
