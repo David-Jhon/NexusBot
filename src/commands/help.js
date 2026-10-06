@@ -19,7 +19,7 @@ function musicHelp() {
         '`/playlist` — save and load your own playlists',
         '',
         'Controls only work if you\'re in the same voice channel as the bot.',
-        'For self-roles, see `/help reactionrole`.',
+        'For self-roles, use `/help` and pick **Reaction roles** as the topic.',
       ].join('\n')),
   ];
 }
@@ -140,11 +140,18 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('help')
     .setDescription('How to use the bot')
-    .addSubcommand((sub) => sub.setName('music').setDescription('Music commands'))
-    .addSubcommand((sub) => sub.setName('reactionrole').setDescription('Step-by-step guide to reaction roles')),
+    .addStringOption((opt) =>
+      opt
+        .setName('topic')
+        .setDescription('What you need help with')
+        .addChoices(
+          { name: 'Reaction roles (step-by-step setup)', value: 'reactionrole' },
+          { name: 'Music commands', value: 'music' },
+        ),
+    ),
 
   async execute(interaction) {
-    const topic = interaction.options.getSubcommand();
+    const topic = interaction.options.getString('topic') ?? 'music';
     return interaction.reply({ ...helpPage(topic, 0), flags: MessageFlags.Ephemeral });
   },
 
