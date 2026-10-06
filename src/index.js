@@ -74,6 +74,40 @@ const player = new Player(client, {
   skipFFmpeg: false,
 });
 
+// Without a listener, a failed extractor activation dumps the whole Player object to the console
+player.extractors.on('error', (_context, extractor, err) => {
+  logger.warn('Extractor', `${extractor?.constructor?.name ?? 'Extractor'} error`, { err: err?.message ?? String(err) });
+});
+
+const YOUTUBE_RETRY_MS = 60_000;
+
+// YouTube sometimes answers the startup player-script fetch with a 5xx. Retry a few times, then keep
+// trying in the background: without YouTube, Spotify tracks bridge to SoundCloud and often play the wrong song.
+async function tryRegisterYoutube() {
+  const ext = await player.extractors.register(YoutubeExtractor, {}).catch(() => null);
+  if (!ext) return false;
+  // Every extractor defaults to priority 1, so Spotify tracks were bridged to SoundCloud first,
+  // whose fuzzy match often picks a different song with the same name. Try YouTube first.
+  ext.priority = 10;
+  logger.info('Bootstrap', 'YouTube extractor registered');
+  return true;
+}
+
+async function registerYoutube(attempts = 3) {
+  for (let i = 1; i <= attempts; i++) {
+    if (await tryRegisterYoutube()) return;
+    if (i < attempts) await new Promise((r) => setTimeout(r, 5_000));
+  }
+  logger.warn('Bootstrap', `YouTube extractor failed to register, retrying every ${YOUTUBE_RETRY_MS / 1000}s`);
+  let busy = false;
+  const retry = setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    if (await tryRegisterYoutube()) clearInterval(retry);
+    busy = false;
+  }, YOUTUBE_RETRY_MS);
+}
+
 (async () => {
   await player.extractors.loadMulti(DefaultExtractors);
 
@@ -89,10 +123,7 @@ const player = new Player(client, {
     logger.info('Bootstrap', 'Spotify skipped (no credentials)');
   }
 
-  // Every extractor defaults to priority 1, so Spotify tracks were bridged to SoundCloud first,
-  // whose fuzzy match often picks a different song with the same name. Try YouTube first.
-  const youtubeExt = await player.extractors.register(YoutubeExtractor, {});
-  if (youtubeExt) youtubeExt.priority = 10;
+  await registerYoutube();
 
   const { DeezerExtractor } = require('discord-player-deezer');
   if (config.deezer.arl && config.deezer.decryptionKey) {

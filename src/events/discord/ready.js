@@ -25,7 +25,7 @@ async function syncDescription(client) {
 }
 
 module.exports = {
-  name: 'ready',
+  name: 'clientReady', // 'ready' is deprecated in discord.js 14.22+ and removed in v15
   once: true,
   async execute(client) {
     logger.info('Client', `Logged in as ${client.user.tag}`);
