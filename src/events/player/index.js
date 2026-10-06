@@ -3,7 +3,7 @@ const { nowPlayingButtons } = require('../../utils/buttons');
 const { clearNpMessage, registerNpMessage, startNpAutoRefresh } = require('../../utils/nowPlayingManager');
 const queueManager = require('../../structures/queueManager');
 const logger = require('../../utils/logger');
-const { useMainPlayer } = require('discord-player');
+const { pickAutoplayTrack } = require('../../utils/autoplay');
 
 /**
  * Resolve the text channel to post updates in, using the metadata we
@@ -53,111 +53,20 @@ function registerPlayerEvents(player) {
     queueManager.clearSnapshot(queue.guild.id);
   });
 
-  // AUTOPLAY fallback: if extractor returns 0 tracks, search for similar ones
+  // AUTOPLAY: YouTube Music radio, then related tracks, then a search by artist (utils/autoplay.js)
   events.on('willAutoPlay', async (queue, tracks, resolver) => {
     logger.info('Player', 'Autoplay triggered', {
       guildId: queue.guild.id,
       relatedTracks: tracks.length,
     });
 
-    if (tracks.length > 0) {
-      resolver(tracks[0]);
-      return;
-    }
-
-    const lastTrack = queue.metadata?.lastTrack;
-    // Search by artist + "music" for variety (avoids generic single-word results).
-    // A track YouTube served without metadata (blocked IP) has neither, so there's nothing to search for.
-    const artist = lastTrack?.author?.trim();
-    const query = artist ? `${artist} music` : lastTrack?.title?.trim();
-    if (query) {
-      // Get list of recently played URLs to avoid repeats
-      const playedUrls = queue.history?.tracks?.map(t => t.url) || [];
-      const lastUrl = lastTrack.url;
-
-      logger.info('Player', 'Autoplay fallback: searching', { query });
-
-      // Subtitle/reaction filter pattern — catches re-uploads, covers, remixes
-      const subtitlePattern = /\b(sub|subtitled?|dubbed?|dub|instrumental|karaoke|cover|remix|live|acoustic|piano|slowed|reverb|nightcore|sped\s*up|lyrics?\s*(video|version)?|official\s*(video|audio)?|music\s*video|reaction(\s*(video|compilation))?|the\s*first\s*take|live\s*session|concert|performance|unplugged|from\s*\w|feat\.?|ft\.?|featuring|compilation|greatest\s*hits|best\s*of|collection|bgm|background\s*music|top\s*\d+|music\s*mix|mega\s*mix|megamix|medley|playlist|mixtape|НА\s*РУССКОМ|EN\s*ESPAÑOL|EM\s*PORTUGUÊS|auf\s*deutsch|en\s*français|italiano|한국어|中文|日本語|العربية|हिन्दी|русский)\s*(v\d+)?|[\(\[][^\)\]]*(cover|remix|live|acoustic|piano|slowed|reverb|nightcore|sped|sub|dub|instrumental|karaoke|reaction|the\s*first\s*take|unplugged)[^\)\]]*[\)\]]/i;
-
-      // Check if title is too similar to the last played track
-      const isSimilarTitle = (t) => {
-        const clean = (s) => s.toLowerCase().replace(/[^\w\s]/g, '').trim();
-        const a = clean(t.title);
-        const b = clean(lastTrack.title);
-        const wordsA = new Set(a.split(/\s+/));
-        const wordsB = new Set(b.split(/\s+/));
-        const intersection = [...wordsA].filter(w => wordsB.has(w)).length;
-        return intersection / Math.max(wordsA.size, wordsB.size) > 0.6;
-      };
-
-      // Check if track is actually by the same artist
-      const isBySameArtist = (t) => {
-        if (!artist) return true; // No artist info, accept any track
-        const titleLower = t.title.toLowerCase();
-        const authorLower = (t.author || '').toLowerCase();
-        const artistLower = artist.toLowerCase();
-        return titleLower.includes(artistLower) || authorLower.includes(artistLower);
-      };
-
-      const isUnique = (t) => t.url !== lastUrl && !playedUrls.includes(t.url) && !subtitlePattern.test(t.title) && !isSimilarTitle(t) && isBySameArtist(t);
-
-      // Try YouTube first (force YouTubeiExtractor to avoid Deezer bridging)
-      try {
-        const searchPlayer = useMainPlayer();
-        const results = await searchPlayer.search(query, {
-          searchEngine: 'ext:com.retrouser955.discord-player.discord-player-youtubei',
-        });
-        if (results?.tracks?.length) {
-          const unique = results.tracks.filter(isUnique);
-          if (unique.length > 0) {
-            logger.info('Player', 'Autoplay fallback: picked YouTube track', { title: unique[0].title });
-            resolver(unique[0]);
-            return;
-          }
-        }
-      } catch (err) {
-        logger.error('Player', 'YouTube autoplay fallback failed', { err: String(err) });
-      }
-
-      // YouTube failed — try Spotify as fallback
-      try {
-        const searchPlayer = useMainPlayer();
-        const spotifyResults = await searchPlayer.search(query, {
-          searchEngine: 'ext:com.discord-player.itsmaat.spotifyextractor',
-        });
-        if (spotifyResults?.tracks?.length) {
-          const unique = spotifyResults.tracks.filter(isUnique);
-          if (unique.length > 0) {
-            logger.info('Player', 'Autoplay fallback: picked Spotify track', { title: unique[0].title });
-            resolver(unique[0]);
-            return;
-          }
-        }
-      } catch (err) {
-        logger.error('Player', 'Spotify autoplay fallback failed', { err: String(err) });
-      }
-
-      // Spotify failed — try Deezer as last resort
-      try {
-        const searchPlayer = useMainPlayer();
-        const deezerResults = await searchPlayer.search(query, {
-          searchEngine: 'ext:com.retrouser955.discord-player.deezr-ext',
-        });
-        if (deezerResults?.tracks?.length) {
-          const unique = deezerResults.tracks.filter(isUnique);
-          if (unique.length > 0) {
-            logger.info('Player', 'Autoplay fallback: picked Deezer track', { title: unique[0].title });
-            resolver(unique[0]);
-            return;
-          }
-        }
-      } catch (err) {
-        logger.error('Player', 'Deezer autoplay fallback failed', { err: String(err) });
-      }
-    }
-
-    resolver(null);
+    // Usually the next song was already picked and queued before this one ended (see utils/prefetch.js);
+    // this runs when that early pick found nothing or the song ended too soon for it
+    const pick = await pickAutoplayTrack(queue, tracks, queue.metadata?.lastTrack).catch((err) => {
+      logger.error('Player', 'Autoplay pick failed', { err: String(err) });
+      return null;
+    });
+    resolver(pick);
   });
 
   events.on('emptyChannel', (queue) => {

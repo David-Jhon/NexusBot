@@ -30,7 +30,7 @@ npm start               # start the bot
 - **Reaction roles:** `/reactionrole` + `src/utils/reactionRoles.js` (all mode/limit rules live in `applyRoleAction`) + `src/utils/reactionRoleEvents.js`. Needs `GuildMessageReactions` intent and `Message`/`Reaction`/`User` partials so old panels work after restarts. Members are fetched with `force: true` because there's no `GuildMembers` intent.
 - **Reaction-role panels are Components V2 cards** (`buildPanelMessage`). Always edit a panel with the full payload: it sets `content: null, embeds: []` so panels posted with the old embed layout upgrade instead of being rejected, and `allowedMentions: { parse: [] }` so role mentions don't ping. Limits: 40 components and 4000 text chars per message. Button panels show an inline button per role up to 11 roles, then fall back to a 5×5 button grid inside the card.
 - **Persistence:** Queue state snapshotted to SQLite (debounced 3s). Rehydrated on boot. Watchdog checks every 30s for dead voice connections.
-- **Gapless transitions:** `src/utils/prefetch.js` extracts the next track's stream ~30s before the current one ends and serves it via discord-player's global `onBeforeCreateStream` hook (cut the gap from ~6.6s to <0.1s). Not applied to autoplay picks or repeat-track.
+- **Gapless transitions:** `src/utils/prefetch.js` extracts the next track's stream ~30s before the current one ends and serves it via discord-player's global `onBeforeCreateStream` hook (cut the gap from ~6.6s to <0.1s). Autoplay is covered by picking its next song early (see Autoplay). Not applied to repeat-track.
 - **Vote-skip:** Uses a `__voteSkips` Set on the queue object (non-standard). Default threshold 0.5.
 
 ## Extractors
@@ -45,11 +45,12 @@ Registered in `src/index.js` bootstrap (order matters for priority):
 
 ## Autoplay
 
-Implemented in `src/events/player/index.js` (`willAutoPlay` event):
-- Searches by **artist only** (not artist + title) for variety
-- Filters out: subtitle/reaction videos, covers, remixes, compilations, BGM, similar titles (>60% word overlap)
-- Checks track is actually by the same artist (title/author contains artist name)
-- Fallback chain: YouTube → Spotify → Deezer (each forced to its own extractor)
+Picking lives in `src/utils/autoplay.js` (`pickAutoplayTrack`), used by the `willAutoPlay` event and by the early pick in `src/utils/prefetch.js`:
+- **Early pick:** ~30s before the last queued song ends, the next autoplay song is picked and added to the queue, so it gets prefetched like any queued song (gapless). The pick is removed if someone queues their own songs or autoplay is turned off. `willAutoPlay` only runs when the early pick found nothing.
+- **Primary source: YouTube Music radio** (`innertube.music.getUpNext(videoId, true)`), the same "up next" YouTube Music plays. Non-YouTube songs are matched with `music.search(title artist, { type: 'song' })` first. The chosen video is re-resolved through the YouTube extractor because the radio lists the song's length, not the video's.
+- `discord-player-youtubei`'s own `getRelatedTracks`/mix parsing returns nothing since YouTube's layout change (LockupView), so don't rely on it.
+- Played songs are skipped by URL and by normalized title (the same song from Spotify and YouTube has different URLs).
+- Fallback when the radio fails: extractor related tracks, then a search by **artist only**, filtering out subtitle/reaction videos, covers, remixes, compilations, BGM, similar titles (>60% word overlap) and other artists. Chain: YouTube → Spotify → Deezer (each forced to its own extractor).
 
 ## Production
 

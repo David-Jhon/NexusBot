@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { Readable } = require('node:stream');
 const { QueueRepeatMode } = require('discord-player');
 const logger = require('./logger');
+const { pickAutoplayTrack } = require('./autoplay');
 
 // Finding a stream for the next song takes several seconds (YouTube tries a few download methods),
 // which used to be dead air between songs. Near the end of each song we look up the next song's
@@ -54,6 +55,39 @@ function nextTrack(queue) {
   return queue.tracks.at(0) || null;
 }
 
+// Autoplay normally picks its next song only after the current one ends, which leaves a gap.
+// Instead we pick it near the end and queue it, so it's prefetched like any queued song.
+const autoplayPicks = new WeakSet(); // tracks queued by the early pick
+const autoplayPickedFor = new Map(); // guildId -> id of the song the early pick ran for
+
+// An early pick only stands in for an empty queue: drop it once someone queues their own songs
+// or autoplay is turned off, so it doesn't play ahead of (or instead of) what people asked for
+function dropStaleAutoplayPicks(queue) {
+  const keep = queue.repeatMode === QueueRepeatMode.AUTOPLAY && queue.tracks.size === 1;
+  if (keep) return;
+  for (const track of queue.tracks.toArray()) {
+    if (autoplayPicks.has(track)) queue.removeTrack(track);
+  }
+}
+
+function pickAutoplayEarly(player, queue, current) {
+  const guildId = queue.guild.id;
+  if (autoplayPickedFor.get(guildId) === current.id) return;
+  autoplayPickedFor.set(guildId, current.id);
+
+  const lastTrack = { title: current.title, author: current.author, url: current.url };
+  (async () => {
+    const pick = await pickAutoplayTrack(queue, [], lastTrack);
+    // Things may have changed during the search; if so the regular end-of-song autoplay takes over
+    const unchanged = !queue.deleted && queue.currentTrack?.id === current.id && queue.tracks.size === 0
+      && queue.repeatMode === QueueRepeatMode.AUTOPLAY;
+    if (!pick || !unchanged) return;
+    autoplayPicks.add(pick);
+    queue.addTrack(pick);
+    logger.info('Player', 'Autoplay queued the next song early', { title: pick.title });
+  })().catch((err) => logger.warn('Prefetch', 'Early autoplay pick failed', { err: String(err?.message ?? err) }));
+}
+
 function check(player) {
   for (const guildId of prepared.keys()) {
     if (!player.nodes.cache.has(guildId)) discard(guildId);
@@ -61,17 +95,23 @@ function check(player) {
 
   for (const queue of player.nodes.cache.values()) {
     const guildId = queue.guild.id;
+    dropStaleAutoplayPicks(queue);
     const next = nextTrack(queue);
     const entry = prepared.get(guildId);
 
     // The queue changed (skip, shuffle, remove, clear) since this was prepared, or it got too old
     if (entry && (entry.trackId !== next?.id || Date.now() - entry.createdAt > MAX_AGE_MS)) discard(guildId);
-    if (!next || prepared.has(guildId)) continue;
+    if (prepared.has(guildId)) continue;
 
     const current = queue.currentTrack;
     if (!current || !queue.node.isPlaying()) continue;
     const remaining = (current.durationMS || 0) - queue.node.estimatedPlaybackTime;
     if (remaining > PREFETCH_BEFORE_END_MS) continue;
+
+    if (!next) {
+      if (queue.repeatMode === QueueRepeatMode.AUTOPLAY) pickAutoplayEarly(player, queue, current);
+      continue;
+    }
 
     const startedAt = Date.now();
     const promise = extractStream(player, next)
@@ -115,7 +155,10 @@ function startPrefetcher(player) {
   }, CHECK_INTERVAL_MS);
   timer.unref();
 
-  player.events.on('queueDelete', (queue) => discard(queue.guild.id));
+  player.events.on('queueDelete', (queue) => {
+    discard(queue.guild.id);
+    autoplayPickedFor.delete(queue.guild.id);
+  });
 }
 
 module.exports = { startPrefetcher, onBeforeCreateStream, discard };
