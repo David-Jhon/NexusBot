@@ -146,7 +146,7 @@ module.exports = {
         return reply(interaction, errorEmbed('**Reversed** mode only works with the **Reaction** style.'));
       }
 
-      const needed = ['ViewChannel', 'SendMessages', 'EmbedLinks'];
+      const needed = ['ViewChannel', 'SendMessages'];
       if (style === 'reaction') needed.push('AddReactions', 'ReadMessageHistory');
       const missing = channel.permissionsFor(guild.members.me)?.missing(needed) ?? needed;
       if (missing.length) {

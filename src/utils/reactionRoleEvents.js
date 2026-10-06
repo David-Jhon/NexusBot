@@ -147,8 +147,10 @@ async function handleComponent(interaction) {
     if (interaction.isStringSelectMenu()) {
       const fresh = db.getPanel(panel.messageId);
       if (fresh) {
-        const { components } = buildPanelMessage(fresh, db.getReactionRoles(panel.messageId), interaction.guild);
-        await interaction.message.edit({ components }).catch(() => null);
+        // Full payload, so a panel still on the old embed layout is upgraded instead of rejected
+        await interaction.message
+          .edit(buildPanelMessage(fresh, db.getReactionRoles(panel.messageId), interaction.guild))
+          .catch(() => null);
       }
     }
 

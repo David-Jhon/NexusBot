@@ -2,9 +2,16 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ContainerBuilder,
+  MessageFlags,
+  SectionBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
   StringSelectMenuBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
 } = require('discord.js');
-const { baseEmbed } = require('./embeds');
+const config = require('../config');
 const db = require('../database/db');
 
 const STYLES = ['reaction', 'button', 'dropdown'];
@@ -40,6 +47,22 @@ const STYLE_FOOTERS = {
   dropdown: 'Use the menu below',
 };
 
+// Label for the button next to each role, matching what a click does in that mode
+const BUTTON_LABELS = {
+  normal: 'Toggle',
+  unique: 'Pick',
+  verify: 'Get',
+  drop: 'Remove',
+  reversed: 'Toggle',
+  binding: 'Pick',
+};
+
+// Discord limits a Components V2 message to 40 components and 4000 characters of text.
+// Header (3) + separators and footer (3) + container (1) leave room for 11 role rows with
+// their own button (3 components each); bigger button panels use a 5x5 button grid instead.
+const MAX_INLINE_BUTTONS = 11;
+const MAX_TEXT = 4000;
+
 const CUSTOM_EMOJI_RE = /^<(a?):([\w~]{1,32}):(\d{17,20})>$/;
 // Rough check: input must contain at least one pictographic/regional-indicator/keycap character
 const UNICODE_EMOJI_RE = /\p{Extended_Pictographic}|\p{Regional_Indicator}|⃣/u;
@@ -71,38 +94,74 @@ function roleLabel(mapping, guild) {
   return truncate(mapping.label || guild.roles.cache.get(mapping.roleId)?.name || 'Unknown role', 80);
 }
 
-/** Build the full panel message payload ({ embeds, components }). */
+function roleLine(mapping, withDescription = true) {
+  const name = mapping.label ? `**${mapping.label}** · <@&${mapping.roleId}>` : `<@&${mapping.roleId}>`;
+  const desc = withDescription && mapping.description ? `\n-# ${mapping.description}` : '';
+  return `${mapping.emojiRaw ?? '•'}  ${name}${desc}`;
+}
+
+const textLength = (texts) => texts.reduce((sum, t) => sum + t.length, 0);
+
+/**
+ * Build the panel as a Components V2 card. The payload clears content/embeds so it can also
+ * edit panels posted with the old embed layout, and disables pings for the role mentions.
+ */
 function buildPanelMessage(panel, mappings, guild) {
-  const lines = mappings.map((m) => {
-    const prefix = m.emojiRaw ?? '•';
-    const desc = m.description ? `\n-# ${m.description}` : '';
-    const name = m.label ? `**${m.label}** · <@&${m.roleId}>` : `<@&${m.roleId}>`;
-    return `${prefix}  ${name}${desc}`;
-  });
+  const inline = panel.style === 'button' && mappings.length > 0 && mappings.length <= MAX_INLINE_BUTTONS;
 
-  const limit = panel.maxRoles > 0 && panel.mode !== 'unique' ? ` · Limit **${panel.maxRoles}**` : '';
-  const modeBlock = `> **${MODE_BADGES[panel.mode]} mode**${limit}\n> ${MODE_HINTS[panel.mode]}`;
-  const roleList = lines.join('\n') || '*No roles yet. Add some with `/reactionrole add`.*';
-  // Truncate the role list, never the mode block, so members always see how the panel behaves
-  const head = panel.description ? `${panel.description}\n\n` : '';
-  const description = `${truncate(`${head}${roleList}`, 4096 - modeBlock.length - 2)}\n\n${modeBlock}`;
+  const limit = panel.maxRoles > 0 && panel.mode !== 'unique' ? ` · Limit ${panel.maxRoles}` : '';
+  const count = `${mappings.length} role${mappings.length === 1 ? '' : 's'}`;
+  const footer = `-# ${MODE_BADGES[panel.mode]} mode${limit} · ${MODE_HINTS[panel.mode]}\n-# ${count} · ${STYLE_FOOTERS[panel.style]}`;
+  const title = `## ${panel.title}`;
 
+  // One text per role row when buttons sit inline, otherwise a single list
+  let roleTexts = inline
+    ? mappings.map((m) => roleLine(m))
+    : [mappings.map((m) => roleLine(m)).join('\n') || '*No roles yet. Add some with `/reactionrole add`.*'];
+  if (!inline && textLength([title, footer, ...roleTexts]) > MAX_TEXT) {
+    // Too long: drop the per-role descriptions (dropdown options still show them), then cut the list
+    const list = mappings.map((m) => roleLine(m, false)).join('\n');
+    roleTexts = [truncate(list, MAX_TEXT - title.length - footer.length)];
+  }
+
+  // The panel description gets whatever text budget is left; the mode footer is never cut
+  const room = MAX_TEXT - textLength([title, footer, ...roleTexts]) - 1;
+  const description = panel.description && room > 1 ? `\n${truncate(panel.description, room)}` : '';
+
+  const card = new ContainerBuilder();
   // Accent with the first panel role that has a color, so each panel matches its roles
   const accent = mappings.map((m) => guild.roles.cache.get(m.roleId)?.colors?.primaryColor).find(Boolean);
+  card.setAccentColor(accent || config.brand.color);
+
+  const header = new TextDisplayBuilder().setContent(`${title}${description}`);
   const icon = guild.iconURL({ size: 256 });
-  const count = `${mappings.length} role${mappings.length === 1 ? '' : 's'}`;
+  if (icon) {
+    card.addSectionComponents(
+      new SectionBuilder().addTextDisplayComponents(header).setThumbnailAccessory(new ThumbnailBuilder().setURL(icon)),
+    );
+  } else {
+    card.addTextDisplayComponents(header);
+  }
+  card.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large));
 
-  const embed = baseEmbed()
-    .setAuthor({ name: guild.name, iconURL: icon ?? undefined })
-    .setTitle(panel.title)
-    .setThumbnail(icon)
-    .setDescription(description)
-    .setFooter({ text: `${count} · ${STYLE_FOOTERS[panel.style]}` });
-  if (accent) embed.setColor(accent);
+  if (inline) {
+    mappings.forEach((m, i) => {
+      card.addSectionComponents(
+        new SectionBuilder()
+          .addTextDisplayComponents(new TextDisplayBuilder().setContent(roleTexts[i]))
+          .setButtonAccessory(
+            new ButtonBuilder()
+              .setCustomId(`${BUTTON_PREFIX}${m.roleId}`)
+              .setLabel(BUTTON_LABELS[panel.mode])
+              .setStyle(ButtonStyle.Primary),
+          ),
+      );
+    });
+  } else {
+    card.addTextDisplayComponents(new TextDisplayBuilder().setContent(roleTexts[0]));
+  }
 
-  const components = [];
-
-  if (panel.style === 'button' && mappings.length) {
+  if (panel.style === 'button' && !inline && mappings.length) {
     for (let i = 0; i < mappings.length; i += 5) {
       const row = new ActionRowBuilder();
       for (const m of mappings.slice(i, i + 5)) {
@@ -113,7 +172,7 @@ function buildPanelMessage(panel, mappings, guild) {
         if (m.emojiRaw) button.setEmoji(m.emojiRaw);
         row.addComponents(button);
       }
-      components.push(row);
+      card.addActionRowComponents(row);
     }
   }
 
@@ -131,10 +190,19 @@ function buildPanelMessage(panel, mappings, guild) {
           return option;
         }),
       );
-    components.push(new ActionRowBuilder().addComponents(menu));
+    card.addActionRowComponents(new ActionRowBuilder().addComponents(menu));
   }
 
-  return { embeds: [embed], components };
+  card.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
+  card.addTextDisplayComponents(new TextDisplayBuilder().setContent(footer));
+
+  return {
+    content: null,
+    embeds: [],
+    components: [card],
+    flags: MessageFlags.IsComponentsV2,
+    allowedMentions: { parse: [] },
+  };
 }
 
 /**

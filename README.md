@@ -84,9 +84,10 @@ pm2 startup   # follow the printed instructions to survive host reboots
 Carl-bot / Dyno style self-assignable roles. Requires **Manage Roles** to use
 the command, and the bot's role must sit above every role it hands out.
 
-1. `/reactionrole create` — posts a panel. Pick a **style**:
+1. `/reactionrole create` — posts a panel as a card with the server icon and a color
+   accent taken from its roles. Pick a **style**:
    - `reaction` — members react with an emoji (max 20 roles)
-   - `button` — one button per role (max 25)
+   - `button` — one button per role (max 25; up to 11 sit next to their role, more become a grid)
    - `dropdown` — a select menu (max 25)
 2. `/reactionrole add panel role emoji label description` — attach roles (emoji is required
    for reaction panels, optional otherwise). `description` is a one-liner shown under the
@@ -104,7 +105,8 @@ the command, and the bot's role must sit above every role it hands out.
 
 `limit` caps how many roles a member can hold from one panel (0 = unlimited).
 Panels keep working after restarts; deleting the panel message or a role
-cleans up automatically.
+cleans up automatically. Panels made with the older embed layout switch to the
+card the next time they're edited (add/remove/mode, or a dropdown pick).
 
 ## Project layout
 
